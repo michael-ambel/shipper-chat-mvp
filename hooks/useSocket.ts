@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Socket } from 'socket.io-client'
-import { getSocket, disconnectSocket } from '@/lib/socket-client'
+import { io, Socket } from 'socket.io-client'
 
 interface UseSocketReturn {
   socket: Socket | null
@@ -14,12 +13,22 @@ export function useSocket(token: string | null): UseSocketReturn {
   const [onlineUsers, setOnlineUsers] = useState<string[]>([])
 
   useEffect(() => {
-    if (!token) return
+    if (!token) {
+      return
+    }
 
-    const socketInstance = getSocket(token)
+    const socketUrl = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:3000'
+    const socketInstance = io(socketUrl, {
+      auth: { token },
+      autoConnect: true,
+    })
 
     socketInstance.on('connect', () => {
       setIsConnected(true)
+    })
+
+    socketInstance.on('connect_error', () => {
+      setIsConnected(false)
     })
 
     socketInstance.on('disconnect', () => {
@@ -33,10 +42,9 @@ export function useSocket(token: string | null): UseSocketReturn {
     setSocket(socketInstance)
 
     return () => {
-      disconnectSocket()
+      socketInstance.disconnect()
     }
   }, [token])
 
   return { socket, isConnected, onlineUsers }
 }
-

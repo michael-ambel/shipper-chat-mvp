@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-import { hashPassword, generateToken, setAuthCookie } from '@/lib/auth'
+import { hashPassword, generateToken } from '@/lib/auth'
 
 export async function POST(request: NextRequest) {
   try {
@@ -50,9 +50,17 @@ export async function POST(request: NextRequest) {
     })
 
     const token = generateToken({ userId: user.id, email: user.email })
-    await setAuthCookie(token)
 
-    return NextResponse.json({ user, token }, { status: 201 })
+    const response = NextResponse.json({ user, token }, { status: 201 })
+    response.cookies.set('auth-token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 7,
+      path: '/',
+    })
+
+    return response
   } catch (error) {
     console.error('Signup error:', error)
     return NextResponse.json(

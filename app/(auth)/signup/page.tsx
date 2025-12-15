@@ -31,6 +31,10 @@ export default function SignupPage() {
         return
       }
 
+      if (data.token) {
+        localStorage.setItem('auth-token', data.token)
+      }
+
       router.push('/chat')
     } catch (err) {
       setError('Something went wrong. Please try again.')

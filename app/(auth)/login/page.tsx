@@ -16,6 +16,8 @@ export default function LoginPage() {
     setError('')
     setLoading(true)
 
+    localStorage.removeItem('auth-token')
+
     try {
       const response = await fetch('/api/auth/login', {
         method: 'POST',
@@ -28,6 +30,10 @@ export default function LoginPage() {
       if (!response.ok) {
         setError(data.error || 'Login failed')
         return
+      }
+
+      if (data.token) {
+        localStorage.setItem('auth-token', data.token)
       }
 
       router.push('/chat')
