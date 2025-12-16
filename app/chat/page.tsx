@@ -14,6 +14,7 @@ export default function ChatPage() {
   const [selectedUserName, setSelectedUserName] = useState<string | null>(null)
   const [users, setUsers] = useState<any[]>([])
   const [showChat, setShowChat] = useState(false)
+  const [refreshTrigger, setRefreshTrigger] = useState(0)
 
   const { socket, isConnected, onlineUsers } = useSocket(token)
 
@@ -21,6 +22,21 @@ export default function ChatPage() {
     fetchCurrentUser()
     fetchUsers()
   }, [])
+
+  // Listen for unread count changes via socket
+  useEffect(() => {
+    if (!socket) return
+
+    const handleUnreadCountChanged = () => {
+      setRefreshTrigger(prev => prev + 1)
+    }
+
+    socket.on('unread_count_changed', handleUnreadCountChanged)
+
+    return () => {
+      socket.off('unread_count_changed', handleUnreadCountChanged)
+    }
+  }, [socket])
 
   const fetchCurrentUser = async () => {
     try {
@@ -56,6 +72,10 @@ export default function ChatPage() {
       }
     } catch (error) {
     }
+  }
+
+  const handleUnreadChange = () => {
+    setRefreshTrigger(prev => prev + 1)
   }
 
   const handleSelectUser = (userId: string) => {
@@ -125,6 +145,7 @@ export default function ChatPage() {
             onSelectUser={handleSelectUser}
             selectedUserId={selectedUserId}
             currentUserId={currentUser?.id}
+            refreshTrigger={refreshTrigger}
           />
         </div>
         <div className={`${showChat ? 'flex' : 'hidden sm:flex'} flex-1`}>
@@ -135,6 +156,7 @@ export default function ChatPage() {
             socket={socket}
             onBack={handleBackToUsers}
             isMobile={showChat}
+            onUnreadChange={handleUnreadChange}
           />
         </div>
       </div>

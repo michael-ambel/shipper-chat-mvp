@@ -63,6 +63,7 @@ app.prepare().then(() => {
     const userId = socket.data.userId
 
     onlineUsers.set(userId, socket.id)
+    
     io.emit('user_status', {
       userId,
       status: 'online',
@@ -70,22 +71,80 @@ app.prepare().then(() => {
     })
 
     socket.on('send_message', async (data) => {
-      const { recipientId, message } = data
+      const { recipientId, message, messageId } = data
       const recipientSocketId = onlineUsers.get(recipientId)
+      const now = new Date()
 
       if (recipientSocketId) {
+        if (messageId) {
+          try {
+            await prisma.message.update({
+              where: { id: messageId },
+              data: { deliveredAt: now },
+            })
+          } catch (error) {
+          }
+        }
+
         io.to(recipientSocketId).emit('receive_message', {
           senderId: userId,
           message,
-          timestamp: new Date().toISOString(),
+          messageId,
+          timestamp: now.toISOString(),
         })
+
+        // Notify recipient to refresh unread counts
+        io.to(recipientSocketId).emit('unread_count_changed')
       }
 
       socket.emit('message_sent', {
         recipientId,
         message,
-        timestamp: new Date().toISOString(),
+        messageId,
+        timestamp: now.toISOString(),
       })
+
+      // Only emit delivered if recipient is online
+      if (messageId && recipientSocketId) {
+        socket.emit('message_delivered', {
+          messageId,
+          deliveredAt: now.toISOString(),
+        })
+      }
+    })
+
+    socket.on('message_read', async (data) => {
+      const { messageId } = data
+
+      if (!messageId) return
+
+      const now = new Date()
+
+      try {
+        const message = await prisma.message.update({
+          where: { id: messageId },
+          data: {
+            isRead: true,
+            readAt: now,
+          },
+          select: {
+            senderId: true,
+          },
+        })
+        
+        const senderSocketId = onlineUsers.get(message.senderId)
+        
+        if (senderSocketId) {
+          io.to(senderSocketId).emit('message_read', {
+            messageId,
+            readAt: now.toISOString(),
+          })
+        }
+
+        // Notify current user (reader) to refresh unread counts
+        socket.emit('unread_count_changed')
+      } catch (error) {
+      }
     })
 
     socket.on('typing', (data) => {

@@ -3,12 +3,16 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { Socket } from 'socket.io-client'
 import { ChevronLeft, MessageCircleMore } from 'lucide-react'
+import { MessageStatus } from './MessageStatus'
 
 interface Message {
   id: string
   content: string
   senderId: string
   createdAt: string
+  deliveredAt?: string | null
+  isRead?: boolean | null
+  readAt?: string | null
   sender: {
     id: string
     name: string
@@ -24,9 +28,10 @@ interface ChatWindowProps {
   socket: Socket | null
   onBack: () => void
   isMobile: boolean
+  onUnreadChange?: () => void
 }
 
-export default function ChatWindow({ selectedUserId, selectedUserName, currentUserId, socket, onBack, isMobile }: ChatWindowProps) {
+export default function ChatWindow({ selectedUserId, selectedUserName, currentUserId, socket, onBack, isMobile, onUnreadChange }: ChatWindowProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [inputValue, setInputValue] = useState('')
   const [sessionId, setSessionId] = useState<string | null>(null)
@@ -56,15 +61,52 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
     }
   }, [selectedUserId])
 
+  // Global socket listeners for message status updates
+  useEffect(() => {
+    if (!socket) return
+
+    const handleMessageDelivered = (data: any) => {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === data.messageId
+            ? { ...m, deliveredAt: data.deliveredAt }
+            : m
+        )
+      )
+    }
+
+    const handleMessageRead = (data: any) => {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === data.messageId
+            ? { ...m, isRead: true, readAt: data.readAt }
+            : m
+        )
+      )
+    }
+
+    socket.on('message_delivered', handleMessageDelivered)
+    socket.on('message_read', handleMessageRead)
+
+    return () => {
+      socket.off('message_delivered', handleMessageDelivered)
+      socket.off('message_read', handleMessageRead)
+    }
+  }, [socket])
+
+  // Session-specific socket listeners
   useEffect(() => {
     if (socket && sessionId) {
-      socket.on('receive_message', (data) => {
+      const handleReceiveMessage = (data: any) => {
         if (data.senderId === selectedUserId) {
           const newMessage: Message = {
-            id: Date.now().toString(),
+            id: data.messageId || Date.now().toString(),
             content: data.message,
             senderId: data.senderId,
             createdAt: data.timestamp,
+            deliveredAt: data.timestamp,
+            isRead: false,
+            readAt: null,
             sender: {
               id: data.senderId,
               name: selectedUserName || 'User',
@@ -74,10 +116,17 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
           }
           setMessages((prev) => [...prev, newMessage])
           scrollToBottom()
-        }
-      })
 
-      socket.on('user_typing', (data) => {
+          // Mark as read immediately since chat is open
+          if (data.messageId) {
+            markMessageAsRead(data.messageId)
+          }
+        }
+      }
+
+      socket.on('receive_message', handleReceiveMessage)
+
+      const handleUserTyping = (data: any) => {
         if (data.userId === selectedUserId) {
           setIsTyping(true)
           
@@ -89,21 +138,24 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
             setIsTyping(false)
           }, 3000)
         }
-      })
+      }
 
-      socket.on('user_stop_typing', (data) => {
+      const handleUserStopTyping = (data: any) => {
         if (data.userId === selectedUserId) {
           setIsTyping(false)
           if (isTypingTimeoutRef.current) {
             clearTimeout(isTypingTimeoutRef.current)
           }
         }
-      })
+      }
+
+      socket.on('user_typing', handleUserTyping)
+      socket.on('user_stop_typing', handleUserStopTyping)
 
       return () => {
-        socket.off('receive_message')
-        socket.off('user_typing')
-        socket.off('user_stop_typing')
+        socket.off('receive_message', handleReceiveMessage)
+        socket.off('user_typing', handleUserTyping)
+        socket.off('user_stop_typing', handleUserStopTyping)
         if (isTypingTimeoutRef.current) {
           clearTimeout(isTypingTimeoutRef.current)
         }
@@ -138,6 +190,24 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
         const messagesData = await messagesResponse.json()
         if (messagesResponse.ok) {
           setMessages(messagesData.messages)
+
+          // Mark incoming messages as read
+          const unread = messagesData.messages.filter(
+            (m: Message) =>
+              m.senderId !== currentUserId && !m.isRead
+          )
+
+          if (unread.length > 0) {
+            // Mark all unread messages as read (skip individual refreshes)
+            Promise.all(
+              unread.map((m: Message) => markMessageAsRead(m.id, true))
+            ).then(() => {
+              // Refresh user list once after all messages are marked as read
+              if (onUnreadChange) {
+                setTimeout(onUnreadChange, 300)
+              }
+            })
+          }
         }
       }
     } catch (error) {
@@ -169,6 +239,7 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
         socket.emit('send_message', {
           recipientId: selectedUserId,
           message: messageContent,
+          messageId: data.message.id,
         })
       }
     } catch (error) {
@@ -191,6 +262,34 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
       socket.emit('stop_typing', { recipientId: selectedUserId })
     }, 1500)
   }, [socket, selectedUserId])
+
+  const markMessageAsRead = async (messageId: string, skipRefresh = false) => {
+    try {
+      const response = await fetch(`/api/messages/${messageId}/status`, {
+        method: 'PATCH',
+      })
+      
+      if (!response.ok) {
+        return
+      }
+
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === messageId ? { ...m, isRead: true, readAt: new Date().toISOString() } : m
+        )
+      )
+
+      if (socket) {
+        socket.emit('message_read', { messageId })
+      }
+
+      // Refresh unread counts after marking as read (unless batching)
+      if (!skipRefresh && onUnreadChange) {
+        setTimeout(() => onUnreadChange(), 200)
+      }
+    } catch (error) {
+    }
+  }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInputValue(e.target.value)
@@ -291,11 +390,16 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
                   >
                     <p className="wrap-break-word text-sm sm:text-base">{message.content}</p>
                     <p
-                      className={`text-xs mt-1 ${
+                      className={`text-xs mt-1 flex items-center ${
                         isOwn ? 'text-gray-300' : 'text-gray-600'
                       }`}
                     >
-                      {formatTime(message.createdAt)}
+                      <span>{formatTime(message.createdAt)}</span>
+                      <MessageStatus
+                        isOwn={isOwn}
+                        deliveredAt={message.deliveredAt}
+                        isRead={message.isRead}
+                      />
                     </p>
                   </div>
                 </div>

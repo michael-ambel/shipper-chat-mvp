@@ -31,7 +31,43 @@ export async function GET() {
       },
     })
 
-    return NextResponse.json({ users })
+    const usersWithUnread = await Promise.all(
+      users.map(async (user) => {
+        // Find 1-1 session between current user and this user
+        const session = await prisma.chatSession.findFirst({
+          where: {
+            isGroup: false,
+            OR: [
+              {
+                user1Id: currentUser.userId,
+                user2Id: user.id,
+              },
+              {
+                user1Id: user.id,
+                user2Id: currentUser.userId,
+              },
+            ],
+          },
+          select: { id: true },
+        })
+
+        if (!session) {
+          return { ...user, unreadCount: 0 }
+        }
+
+        const unreadCount = await prisma.message.count({
+          where: {
+            sessionId: session.id,
+            senderId: user.id,
+            isRead: false,
+          },
+        })
+
+        return { ...user, unreadCount }
+      })
+    )
+
+    return NextResponse.json({ users: usersWithUnread })
   } catch (error) {
     return NextResponse.json(
       { error: 'Internal server error' },

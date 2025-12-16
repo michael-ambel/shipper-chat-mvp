@@ -9,6 +9,7 @@ interface User {
   avatar: string | null
   isAI: boolean
   lastSeen: string | null
+  unreadCount?: number
 }
 
 interface UserListProps {
@@ -16,9 +17,10 @@ interface UserListProps {
   onSelectUser: (userId: string) => void
   selectedUserId: string | null
   currentUserId?: string | null
+  refreshTrigger?: number
 }
 
-export default function UserList({ onlineUsers, onSelectUser, selectedUserId, currentUserId }: UserListProps) {
+export default function UserList({ onlineUsers, onSelectUser, selectedUserId, currentUserId, refreshTrigger }: UserListProps) {
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -26,9 +28,16 @@ export default function UserList({ onlineUsers, onSelectUser, selectedUserId, cu
     fetchUsers()
   }, [])
 
+  useEffect(() => {
+    if (refreshTrigger) {
+      fetchUsers()
+    }
+  }, [refreshTrigger])
+
   const fetchUsers = async () => {
     try {
-      const response = await fetch('/api/users')
+      // Add timestamp to prevent caching
+      const response = await fetch(`/api/users?t=${Date.now()}`)
       const data = await response.json()
       if (response.ok) {
         setUsers(data.users)
@@ -99,7 +108,17 @@ export default function UserList({ onlineUsers, onSelectUser, selectedUserId, cu
             {users.map((user) => (
               <button
                 key={user.id}
-                onClick={() => onSelectUser(user.id)}
+                onClick={() => {
+                  onSelectUser(user.id)
+                  // Optimistically clear unread count when opening the chat
+                  if (user.unreadCount && user.unreadCount > 0) {
+                    setUsers(prev =>
+                      prev.map(u =>
+                        u.id === user.id ? { ...u, unreadCount: 0 } : u
+                      )
+                    )
+                  }
+                }}
                 className={`w-full p-4 flex items-center gap-3 hover:bg-gray-100 transition-colors ${
                   selectedUserId === user.id ? 'bg-gray-100' : ''
                 }`}
@@ -123,6 +142,11 @@ export default function UserList({ onlineUsers, onSelectUser, selectedUserId, cu
                     }
                   </div>
                 </div>
+                {user.unreadCount && user.unreadCount > 0 && (
+                  <div className="ml-2 flex items-center justify-center min-w-5 h-5 px-2 rounded-full bg-green-500 text-white text-xs font-semibold">
+                    {user.unreadCount}
+                  </div>
+                )}
               </button>
             ))}
           </div>

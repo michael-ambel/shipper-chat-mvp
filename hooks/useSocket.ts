@@ -16,13 +16,17 @@ export function useSocket(token: string | null): UseSocketReturn {
     if (!token) {
       return
     }
-
+    
     const socketUrl = typeof window !== 'undefined' 
       ? window.location.origin 
       : 'http://localhost:3000'
+    
     const socketInstance = io(socketUrl, {
       auth: { token },
       autoConnect: true,
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionAttempts: 5,
     })
 
     socketInstance.on('connect', () => {
