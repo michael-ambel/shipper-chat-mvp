@@ -3,6 +3,9 @@ const { parse } = require('url')
 const next = require('next')
 const { Server } = require('socket.io')
 const jwt = require('jsonwebtoken')
+const { PrismaClient } = require('@prisma/client')
+
+const prisma = new PrismaClient()
 
 const dev = process.env.NODE_ENV !== 'production'
 const hostname = 'localhost'
@@ -100,8 +103,19 @@ app.prepare().then(() => {
       }
     })
 
-    socket.on('disconnect', () => {
+    socket.on('disconnect', async () => {
       onlineUsers.delete(userId)
+      
+      const now = new Date()
+      
+      try {
+        await prisma.user.update({
+          where: { id: userId },
+          data: { lastSeen: now },
+        })
+      } catch (error) {
+      }
+      
       io.emit('user_status', {
         userId,
         status: 'offline',

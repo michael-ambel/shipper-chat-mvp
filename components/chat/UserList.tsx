@@ -8,15 +8,17 @@ interface User {
   email: string
   avatar: string | null
   isAI: boolean
+  lastSeen: string | null
 }
 
 interface UserListProps {
   onlineUsers: string[]
   onSelectUser: (userId: string) => void
   selectedUserId: string | null
+  currentUserId?: string | null
 }
 
-export default function UserList({ onlineUsers, onSelectUser, selectedUserId }: UserListProps) {
+export default function UserList({ onlineUsers, onSelectUser, selectedUserId, currentUserId }: UserListProps) {
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -32,7 +34,6 @@ export default function UserList({ onlineUsers, onSelectUser, selectedUserId }: 
         setUsers(data.users)
       }
     } catch (error) {
-      console.error('Failed to fetch users:', error)
     } finally {
       setLoading(false)
     }
@@ -49,20 +50,42 @@ export default function UserList({ onlineUsers, onSelectUser, selectedUserId }: 
 
   const isOnline = (userId: string) => onlineUsers.includes(userId)
 
+  const formatLastSeen = (lastSeen: string | null | undefined) => {
+    if (!lastSeen) return 'recently'
+    
+    const now = new Date()
+    const seen = new Date(lastSeen)
+    const diffMs = now.getTime() - seen.getTime()
+    const diffMins = Math.floor(diffMs / 60000)
+    const diffHours = Math.floor(diffMs / 3600000)
+    const diffDays = Math.floor(diffMs / 86400000)
+
+    if (diffMins < 1) return 'just now'
+    if (diffMins < 60) return `${diffMins}m ago`
+    if (diffHours < 24) return `${diffHours}h ago`
+    if (diffDays < 7) return `${diffDays}d ago`
+    return seen.toLocaleDateString()
+  }
+
   if (loading) {
     return (
-      <div className="w-80 border-r border-black bg-white p-4">
-        <div className="text-center text-gray-600">Loading users...</div>
+      <div className="w-full border-r border-black bg-white p-4 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-black mx-auto mb-3"></div>
+          <p className="text-gray-600">Loading users...</p>
+        </div>
       </div>
     )
   }
 
+  const otherOnlineCount = onlineUsers.filter(id => id !== currentUserId).length
+
   return (
-    <div className="w-80 border-r border-black bg-white flex flex-col">
+    <div className="w-full border-r border-black bg-white flex flex-col">
       <div className="p-4 border-b border-black">
         <h2 className="text-xl font-bold text-black">Messages</h2>
         <p className="text-sm text-gray-600 mt-1">
-          {onlineUsers.length} online
+          {otherOnlineCount} online
         </p>
       </div>
 
@@ -93,7 +116,12 @@ export default function UserList({ onlineUsers, onSelectUser, selectedUserId }: 
                 </div>
                 <div className="flex-1 text-left">
                   <div className="font-medium text-black">{user.name}</div>
-                  <div className="text-sm text-gray-600 truncate">{user.email}</div>
+                  <div className="text-xs text-gray-500 truncate">
+                    {isOnline(user.id) 
+                      ? 'Online' 
+                      : `Last seen ${formatLastSeen(user.lastSeen)}`
+                    }
+                  </div>
                 </div>
               </button>
             ))}

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react'
 import { Socket } from 'socket.io-client'
+import { ChevronLeft, MessageCircleMore } from 'lucide-react'
 
 interface Message {
   id: string
@@ -21,9 +22,11 @@ interface ChatWindowProps {
   selectedUserName: string | null
   currentUserId: string | null
   socket: Socket | null
+  onBack: () => void
+  isMobile: boolean
 }
 
-export default function ChatWindow({ selectedUserId, selectedUserName, currentUserId, socket }: ChatWindowProps) {
+export default function ChatWindow({ selectedUserId, selectedUserName, currentUserId, socket, onBack, isMobile }: ChatWindowProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [inputValue, setInputValue] = useState('')
   const [sessionId, setSessionId] = useState<string | null>(null)
@@ -96,7 +99,6 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
         }
       }
     } catch (error) {
-      console.error('Failed to load session:', error)
     } finally {
       setLoading(false)
     }
@@ -128,7 +130,6 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
         })
       }
     } catch (error) {
-      console.error('Failed to send message:', error)
     }
   }
 
@@ -152,7 +153,7 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
     return (
       <div className="flex-1 flex items-center justify-center bg-white">
         <div className="text-center">
-          <div className="text-6xl mb-4">💬</div>
+          <MessageCircleMore className="w-10 h-10 mx-auto mb-4 text-gray-400" />
           <h3 className="text-xl font-medium text-black mb-2">
             Select a conversation
           </h3>
@@ -166,16 +167,37 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
 
   return (
     <div className="flex-1 flex flex-col bg-white">
-      <div className="p-4 border-b border-black">
-        <h2 className="text-lg font-bold text-black">{selectedUserName}</h2>
+      <div className="p-4 border-b border-black flex items-center justify-between">
+        {isMobile && (
+          <button
+            onClick={onBack}
+            className="sm:hidden p-2 hover:bg-gray-100 rounded-full transition-colors"
+            aria-label="Back to users"
+          >
+            <ChevronLeft className="w-6 h-6" />
+          </button>
+        )}
+        <h2 className={`text-lg font-bold text-black ${isMobile ? 'ml-auto' : ''}`}>
+          {selectedUserName}
+        </h2>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3 sm:space-y-4">
         {loading ? (
-          <div className="text-center text-gray-600">Loading messages...</div>
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-black mx-auto mb-3"></div>
+              <p className="text-gray-600">Loading messages...</p>
+            </div>
+          </div>
         ) : messages.length === 0 ? (
-          <div className="text-center text-gray-600">
-            No messages yet. Start the conversation!
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center">
+              <MessageCircleMore className="w-10 h-10 mx-auto mb-3 text-gray-400" />
+              <p className="text-gray-600">
+                No messages yet. Start the conversation!
+              </p>
+            </div>
           </div>
         ) : (
           messages.map((message) => {
@@ -186,13 +208,13 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
                 className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}
               >
                 <div
-                  className={`max-w-xs lg:max-w-md px-4 py-2 rounded-2xl ${
+                  className={`max-w-[75%] sm:max-w-xs lg:max-w-md px-3 sm:px-4 py-2 rounded-2xl ${
                     isOwn
                       ? 'bg-black text-white'
                       : 'bg-gray-200 text-black'
                   }`}
                 >
-                  <p className="break-words">{message.content}</p>
+                  <p className="break-words text-sm sm:text-base">{message.content}</p>
                   <p
                     className={`text-xs mt-1 ${
                       isOwn ? 'text-gray-300' : 'text-gray-600'
@@ -208,7 +230,7 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="p-4 border-t border-black">
+      <div className="p-3 sm:p-4 border-t border-black">
         <div className="flex gap-2">
           <input
             type="text"
@@ -216,12 +238,12 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyPress={handleKeyPress}
-            className="flex-1 px-4 py-2 border border-black rounded-full focus:outline-none focus:ring-2 focus:ring-black"
+            className="flex-1 px-3 sm:px-4 py-2 text-sm sm:text-base border border-black rounded-full focus:outline-none focus:ring-2 focus:ring-black"
           />
           <button
             onClick={handleSend}
             disabled={!inputValue.trim()}
-            className="px-6 py-2 bg-black text-white rounded-full hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-4 sm:px-6 py-2 text-sm sm:text-base bg-black text-white rounded-full hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Send
           </button>

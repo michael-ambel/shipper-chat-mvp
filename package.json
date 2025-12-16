@@ -13,6 +13,7 @@
     "@types/jsonwebtoken": "^9.0.10",
     "bcryptjs": "^3.0.3",
     "jsonwebtoken": "^9.0.3",
+    "lucide-react": "^0.561.0",
     "next": "16.0.10",
     "prisma": "^6.19.1",
     "react": "19.2.1",

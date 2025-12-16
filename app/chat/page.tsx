@@ -13,6 +13,7 @@ export default function ChatPage() {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
   const [selectedUserName, setSelectedUserName] = useState<string | null>(null)
   const [users, setUsers] = useState<any[]>([])
+  const [showChat, setShowChat] = useState(false)
 
   const { socket, isConnected, onlineUsers } = useSocket(token)
 
@@ -42,7 +43,6 @@ export default function ChatPage() {
         router.push('/login')
       }
     } catch (error) {
-      console.error('Failed to fetch current user:', error)
       router.push('/login')
     }
   }
@@ -55,7 +55,6 @@ export default function ChatPage() {
         setUsers(data.users)
       }
     } catch (error) {
-      console.error('Failed to fetch users:', error)
     }
   }
 
@@ -63,6 +62,11 @@ export default function ChatPage() {
     setSelectedUserId(userId)
     const user = users.find(u => u.id === userId)
     setSelectedUserName(user?.name || null)
+    setShowChat(true)
+  }
+
+  const handleBackToUsers = () => {
+    setShowChat(false)
   }
 
   const handleLogout = async () => {
@@ -71,23 +75,31 @@ export default function ChatPage() {
       localStorage.removeItem('auth-token')
       router.push('/login')
     } catch (error) {
-      console.error('Logout failed:', error)
     }
+  }
+
+  if (!currentUser) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-white">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-black mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
     <div className="h-screen flex flex-col bg-white">
-      <header className="border-b border-black bg-white p-4 flex justify-between items-center">
+      <header className="border-b border-black bg-white p-3 sm:p-4 flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-black">Chat MVP</h1>
-          {currentUser && (
-            <p className="text-sm text-gray-600">
-              Welcome, {currentUser.name}
-            </p>
-          )}
+          <h1 className="text-xl sm:text-2xl font-bold text-black">Shipper Chat</h1>
+          <p className="text-xs sm:text-sm text-gray-600">
+            Welcome, {currentUser.name}
+          </p>
         </div>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 sm:gap-4">
+          <div className="hidden sm:flex items-center gap-2">
             <div
               className={`w-2 h-2 rounded-full ${
                 isConnected ? 'bg-green-500' : 'bg-red-500'
@@ -99,7 +111,7 @@ export default function ChatPage() {
           </div>
           <button
             onClick={handleLogout}
-            className="px-4 py-2 border border-black rounded-full hover:bg-gray-100 transition-colors text-sm font-medium"
+            className="px-3 sm:px-4 py-2 border border-black rounded-full hover:bg-gray-100 transition-colors text-xs sm:text-sm font-medium"
           >
             Logout
           </button>
@@ -107,17 +119,24 @@ export default function ChatPage() {
       </header>
 
       <div className="flex-1 flex overflow-hidden">
-        <UserList
-          onlineUsers={onlineUsers}
-          onSelectUser={handleSelectUser}
-          selectedUserId={selectedUserId}
-        />
-        <ChatWindow
-          selectedUserId={selectedUserId}
-          selectedUserName={selectedUserName}
-          currentUserId={currentUser?.id || null}
-          socket={socket}
-        />
+        <div className={`${showChat ? 'hidden sm:flex' : 'flex'} w-full sm:w-80`}>
+          <UserList
+            onlineUsers={onlineUsers}
+            onSelectUser={handleSelectUser}
+            selectedUserId={selectedUserId}
+            currentUserId={currentUser?.id}
+          />
+        </div>
+        <div className={`${showChat ? 'flex' : 'hidden sm:flex'} flex-1`}>
+          <ChatWindow
+            selectedUserId={selectedUserId}
+            selectedUserName={selectedUserName}
+            currentUserId={currentUser?.id || null}
+            socket={socket}
+            onBack={handleBackToUsers}
+            isMobile={showChat}
+          />
+        </div>
       </div>
     </div>
   )

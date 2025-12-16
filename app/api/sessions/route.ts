@@ -44,7 +44,6 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ session })
   } catch (error) {
-    console.error('Create session error:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

@@ -25,7 +25,7 @@ export function proxy(request: NextRequest) {
       return response
     }
 
-    if (payload && isAuthPath) {
+    if (payload && (isAuthPath || pathname === '/')) {
       return NextResponse.redirect(new URL('/chat', request.url))
     }
   }
