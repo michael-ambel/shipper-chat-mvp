@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { toast } from 'sonner'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -14,21 +15,38 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
-    setLoading(true)
 
+    // Basic client-side validation
+    const trimmedEmail = email.trim()
+    const trimmedPassword = password.trim()
+
+    if (!trimmedEmail || !trimmedPassword) {
+      const message = 'Email and password are required'
+      setError(message)
+      toast.error(message)
+      return
+    }
+
+    setLoading(true)
     localStorage.removeItem('auth-token')
 
     try {
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: trimmedEmail, password: trimmedPassword }),
       })
 
       const data = await response.json()
 
       if (!response.ok) {
-        setError(data.error || 'Login failed')
+        const message =
+          data.error ||
+          (response.status === 401
+            ? 'Invalid email or password'
+            : 'Login failed')
+        setError(message)
+        toast.error(message)
         return
       }
 
@@ -36,9 +54,12 @@ export default function LoginPage() {
         localStorage.setItem('auth-token', data.token)
       }
 
+      toast.success('Signed in successfully')
       router.push('/chat')
     } catch (err) {
-      setError('Something went wrong. Please try again.')
+      const message = 'Something went wrong. Please try again.'
+      setError(message)
+      toast.error(message)
     } finally {
       setLoading(false)
     }
@@ -53,11 +74,6 @@ export default function LoginPage() {
           </h2>
         </div>
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          {error && (
-            <div className="bg-red-50 text-red-700 px-4 py-3 rounded-xl border border-red-400">
-              {error}
-            </div>
-          )}
           <div className="space-y-4">
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-black">

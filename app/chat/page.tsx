@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 import { useSocket } from '@/hooks/useSocket'
 import UserList from '@/components/chat/UserList'
 import ChatWindow from '@/components/chat/ChatWindow'
@@ -56,9 +57,15 @@ export default function ChatPage() {
         
         setToken(authToken || null)
       } else {
+        if (response.status === 401) {
+          toast.error('Your session has expired. Please sign in again.')
+        } else {
+          toast.error(data.error || 'Failed to load session. Please sign in again.')
+        }
         router.push('/login')
       }
     } catch (error) {
+      toast.error('Unable to verify session. Please sign in again.')
       router.push('/login')
     }
   }
@@ -91,10 +98,17 @@ export default function ChatPage() {
 
   const handleLogout = async () => {
     try {
-      await fetch('/api/auth/logout', { method: 'POST' })
+      const response = await fetch('/api/auth/logout', { method: 'POST' })
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        toast.error(data.error || 'Logout failed. Please try again.')
+        return
+      }
       localStorage.removeItem('auth-token')
+      toast.success('Logged out successfully')
       router.push('/login')
     } catch (error) {
+      toast.error('Logout failed. Please try again.')
     }
   }
 
