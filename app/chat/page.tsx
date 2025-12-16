@@ -126,35 +126,44 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-gray-100">
-      <header className="bg-gray-100 p-3 sm:p-4 flex justify-between items-center">
+    <div className="h-screen flex flex-col" style={{ backgroundColor: '#F3F3EE' }}>
+      <header className="p-3 sm:p-4 flex justify-between items-center" style={{ backgroundColor: '#F3F3EE' }}>
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-black">Shipper Chat</h1>
-          <p className="text-xs sm:text-sm text-gray-500">
+          <h1 style={{ fontSize: '14px', fontWeight: 500, color: '#09090B', lineHeight: '20px' }}>Shipper Chat</h1>
+          <p style={{ fontWeight: 400, color: '#8B8B8B', lineHeight: '150%', letterSpacing: '-0.01em', fontSize: '14px' }}>
             Welcome, {currentUser.name}
           </p>
         </div>
         <div className="flex items-center gap-2 sm:gap-4">
           <div className="hidden sm:flex items-center gap-2">
             <div
-              className={`w-2 h-2 rounded-full ${
-                isConnected ? 'bg-green-500' : 'bg-red-500'
-              }`}
+              className="w-2 h-2 rounded-full"
+              style={{ backgroundColor: isConnected ? '#38C793' : '#8B8B8B' }}
             />
-            <span className="text-sm text-gray-600">
+            <span style={{ fontSize: '14px', fontWeight: 400, color: '#8B8B8B', lineHeight: '150%', letterSpacing: '-0.01em' }}>
               {isConnected ? 'Connected' : 'Disconnected'}
             </span>
           </div>
           <button
             onClick={handleLogout}
-            className="px-3 sm:px-4 py-2 bg-white rounded-full hover:bg-gray-50 transition-colors text-xs sm:text-sm font-medium shadow-sm"
+            className="transition-colors flex items-center justify-center"
+            style={{
+              padding: '8px 16px',
+              backgroundColor: '#1E9A80',
+              borderRadius: '8px',
+              color: '#FFFFFF',
+              fontSize: '14px',
+              fontWeight: 500,
+              height: '32px',
+              lineHeight: '20px'
+            }}
           >
             Logout
           </button>
         </div>
       </header>
 
-      <div className="flex-1 flex overflow-hidden gap-3 sm:gap-4 px-3 sm:px-4 pb-3 sm:pb-4">
+      <div className="flex-1 flex overflow-hidden gap-3 px-3 sm:px-4 pb-3 sm:pb-4" style={{ gap: '12px' }}>
         <div className={`${showChat ? 'hidden sm:flex' : 'flex'} w-full sm:w-80`}>
           <UserList
             onlineUsers={onlineUsers}
@@ -174,6 +183,7 @@ export default function ChatPage() {
             isMobile={showChat}
             onUnreadChange={handleUnreadChange}
             isAI={selectedUser?.isAI}
+            onlineUsers={onlineUsers}
           />
         </div>
       </div>

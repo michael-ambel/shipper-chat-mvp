@@ -82,10 +82,10 @@ export default function UserList({ onlineUsers, onSelectUser, selectedUserId, cu
 
   if (loading) {
     return (
-      <div className="w-full bg-gray-100 rounded-2xl p-4 flex items-center justify-center">
+      <div className="w-full p-4 flex items-center justify-center" style={{ backgroundColor: '#FFFFFF', borderRadius: '24px' }}>
         <div className="text-center">
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-black mx-auto mb-3"></div>
-          <p className="text-gray-600">Loading users...</p>
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 mx-auto mb-3" style={{ borderColor: '#1E9A80', borderTopColor: 'transparent' }}></div>
+          <p style={{ fontWeight: 400, color: '#8B8B8B', lineHeight: '150%', letterSpacing: '-0.01em' }}>Loading users...</p>
         </div>
       </div>
     )
@@ -95,21 +95,21 @@ export default function UserList({ onlineUsers, onSelectUser, selectedUserId, cu
   const otherOnlineCount = onlineUsers.filter(id => id !== currentUserId).length + aiUsersCount
 
   return (
-    <div className="w-full bg-gray-100 rounded-2xl flex flex-col overflow-hidden">
+    <div className="w-full flex flex-col overflow-hidden" style={{ backgroundColor: '#FFFFFF', borderRadius: '24px' }}>
       <div className="p-4 pb-3">
-        <h2 className="text-xl font-bold text-black">Messages</h2>
-        <p className="text-sm text-gray-500 mt-1">
+        <h2 className="text-black" style={{ fontWeight: 500, color: '#09090B', fontSize: '14px', lineHeight: '20px' }}>Messages</h2>
+        <p className="mt-1" style={{ fontWeight: 400, color: '#8B8B8B', lineHeight: '150%', letterSpacing: '-0.01em' }}>
           {otherOnlineCount} online
         </p>
       </div>
 
       <div className="flex-1 overflow-y-auto px-2">
         {users.length === 0 ? (
-          <div className="p-4 text-center text-gray-600">
+          <div className="p-4 text-center" style={{ fontWeight: 400, color: '#8B8B8B', lineHeight: '150%', letterSpacing: '-0.01em' }}>
             No users found
           </div>
         ) : (
-          <div className="space-y-1">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {users.map((user) => (
               <button
                 key={user.id}
@@ -124,38 +124,40 @@ export default function UserList({ onlineUsers, onSelectUser, selectedUserId, cu
                     )
                   }
                 }}
-                className={`w-full p-3 flex items-center gap-3 rounded-xl transition-all ${
-                  selectedUserId === user.id 
-                    ? 'bg-white shadow-sm' 
-                    : 'hover:bg-white/50'
-                }`}
+                className="w-full flex items-center transition-all"
+                style={{
+                  height: '64px',
+                  padding: '12px',
+                  borderRadius: '12px',
+                  backgroundColor: selectedUserId === user.id ? '#F3F3EE' : 'transparent',
+                  gap: '12px'
+                }}
               >
-                <div className="relative">
+                <div className="relative" style={{ flexShrink: 0 }}>
                   {user.isAI ? (
                     <>
-                      <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-white flex items-center justify-center">
-                        <BotMessageSquare className="w-6 h-6" />
+                      <div className="rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-white flex items-center justify-center" style={{ width: '40px', height: '40px' }}>
+                        <BotMessageSquare className="w-5 h-5" />
                       </div>
-                      <div className="absolute bottom-0 right-0 w-3 h-3 min-w-[12px] min-h-[12px] rounded-full border-2 border-white bg-green-500 flex-shrink-0" />
+                      <div className="absolute bottom-0 right-0 w-3 h-3 min-w-[12px] min-h-[12px] rounded-full border-2 border-white flex-shrink-0" style={{ backgroundColor: '#38C793' }} />
                     </>
                   ) : (
                     <>
-                      <div className="w-12 h-12 rounded-full bg-black text-white flex items-center justify-center font-medium">
+                      <div className="rounded-full text-white flex items-center justify-center font-medium" style={{ width: '40px', height: '40px', backgroundColor: '#F7F9FB', color: '#111625' }}>
                         {getInitials(user.name)}
                       </div>
                       <div
-                        className={`absolute bottom-0 right-0 w-3 h-3 min-w-[12px] min-h-[12px] rounded-full border-2 border-white flex-shrink-0 ${
-                          isOnline(user.id, user.isAI) ? 'bg-green-500' : 'bg-gray-400'
-                        }`}
+                        className="absolute bottom-0 right-0 w-3 h-3 min-w-[12px] min-h-[12px] rounded-full border-2 border-white flex-shrink-0"
+                        style={{ backgroundColor: isOnline(user.id, user.isAI) ? '#38C793' : '#8B8B8B' }}
                       />
                     </>
                   )}
                 </div>
-                <div className="flex-1 text-left">
+                <div className="flex-1 text-left flex flex-col justify-center" style={{ height: '40px' }}>
                   <div className="flex items-center gap-2">
-                    <span className="font-medium text-black">{user.name}</span>
+                    <span style={{ fontWeight: 500, color: '#1C1C1C', fontSize: '14px', lineHeight: '20px' }}>{user.name}</span>
                   </div>
-                  <div className="text-xs text-gray-500 truncate">
+                  <div className="truncate" style={{ fontSize: '12px', fontWeight: 400, color: '#8B8B8B', lineHeight: '16px' }}>
                     {isOnline(user.id, user.isAI) 
                       ? 'Online' 
                       : `Last seen ${formatLastSeen(user.lastSeen)}`
@@ -163,7 +165,7 @@ export default function UserList({ onlineUsers, onSelectUser, selectedUserId, cu
                   </div>
                 </div>
                 {typeof user.unreadCount === 'number' && user.unreadCount > 0 && (
-                  <div className="ml-2 flex items-center justify-center min-w-[20px] w-auto h-5 px-1.5 rounded-full bg-green-500 text-white text-xs font-semibold flex-shrink-0">
+                  <div className="flex items-center justify-center min-w-[20px] w-auto h-5 px-1.5 rounded-full text-white text-xs font-semibold flex-shrink-0" style={{ backgroundColor: '#1E9A80' }}>
                     {user.unreadCount}
                   </div>
                 )}

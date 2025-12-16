@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { Socket } from 'socket.io-client'
-import { ChevronLeft, MessageCircleMore } from 'lucide-react'
+import { ChevronLeft, MessageCircleMore, Send } from 'lucide-react'
 import { MessageStatus } from './MessageStatus'
 
 interface Message {
@@ -30,9 +30,10 @@ interface ChatWindowProps {
   isMobile: boolean
   onUnreadChange?: () => void
   isAI?: boolean
+  onlineUsers?: string[]
 }
 
-export default function ChatWindow({ selectedUserId, selectedUserName, currentUserId, socket, onBack, isMobile, onUnreadChange, isAI }: ChatWindowProps) {
+export default function ChatWindow({ selectedUserId, selectedUserName, currentUserId, socket, onBack, isMobile, onUnreadChange, isAI, onlineUsers = [] }: ChatWindowProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [inputValue, setInputValue] = useState('')
   const [sessionId, setSessionId] = useState<string | null>(null)
@@ -403,13 +404,13 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
 
   if (!selectedUserId) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-white rounded-2xl">
+      <div className="flex-1 flex items-center justify-center" style={{ backgroundColor: '#FFFFFF', borderRadius: '24px' }}>
         <div className="text-center">
-          <MessageCircleMore className="w-10 h-10 mx-auto mb-4 text-gray-400" />
-          <h3 className="text-xl font-medium text-black mb-2">
+          <MessageCircleMore className="w-10 h-10 mx-auto mb-4" style={{ color: '#8B8B8B' }} />
+          <h3 className="mb-2" style={{ fontSize: '14px', fontWeight: 500, color: '#09090B', lineHeight: '20px' }}>
             Select a conversation
           </h3>
-          <p className="text-gray-500">
+          <p style={{ fontWeight: 400, color: '#8B8B8B', lineHeight: '150%', letterSpacing: '-0.01em' }}>
             Choose a user from the list to start chatting
           </p>
         </div>
@@ -417,91 +418,110 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
     )
   }
 
+  const isOnline = selectedUserId && onlineUsers?.includes(selectedUserId)
+
   return (
-    <div className="flex-1 flex flex-col bg-white rounded-2xl overflow-hidden shadow-sm">
-      <div className="bg-white px-4 py-4">
+    <div className="flex-1 flex flex-col overflow-hidden" style={{ backgroundColor: '#FFFFFF', borderRadius: '24px' }}>
+      <div className="px-4 py-4" style={{ backgroundColor: '#FFFFFF' }}>
         <div className="flex items-center justify-between">
           {isMobile && (
             <button
               onClick={onBack}
-              className="sm:hidden p-2 hover:bg-gray-100 rounded-full transition-colors"
+              className="sm:hidden transition-colors flex items-center justify-center"
+              style={{ 
+                width: '24px', 
+                height: '24px', 
+                backgroundColor: '#F3F3EE', 
+                borderRadius: '6px' 
+              }}
               aria-label="Back to users"
             >
-              <ChevronLeft className="w-6 h-6" />
+              <ChevronLeft style={{ width: '16px', height: '16px', color: '#28303F' }} />
             </button>
           )}
-          <h2 className={`text-lg font-bold text-black ${isMobile ? 'ml-auto' : ''}`}>
-            {selectedUserName}
-          </h2>
+          <div className="flex items-center gap-2">
+            <h2 className={`${isMobile ? 'ml-auto' : ''}`} style={{ fontSize: '14px', fontWeight: 500, color: '#111625', lineHeight: '20px', letterSpacing: '-0.006em' }}>
+              {selectedUserName}
+            </h2>
+            <span style={{ fontSize: '14px', fontWeight: 500, color: isOnline ? '#38C793' : '#8B8B8B', lineHeight: '16px' }}>
+              {isOnline ? 'Online' : 'Offline'}
+            </span>
+          </div>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-3 sm:p-5 space-y-3 sm:space-y-4 bg-white">
+      <div className="flex-1 overflow-y-auto p-4 scrollbar-hide" style={{ backgroundColor: '#F3F3EE', borderRadius: '16px', margin: '0 12px 0 12px' }}>
         {loading ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-center">
-              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-black mx-auto mb-3"></div>
-              <p className="text-gray-600">Loading messages...</p>
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 mx-auto mb-3" style={{ borderColor: '#1E9A80', borderTopColor: 'transparent' }}></div>
+              <p style={{ fontWeight: 400, color: '#8B8B8B', lineHeight: '150%', letterSpacing: '-0.01em' }}>Loading messages...</p>
             </div>
           </div>
         ) : messages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-center">
-              <MessageCircleMore className="w-10 h-10 mx-auto mb-3 text-gray-400" />
-              <p className="text-gray-500">
+              <MessageCircleMore className="w-10 h-10 mx-auto mb-3" style={{ color: '#8B8B8B' }} />
+              <p style={{ fontWeight: 400, color: '#8B8B8B', lineHeight: '150%', letterSpacing: '-0.01em' }}>
                 No messages yet. Start the conversation!
               </p>
             </div>
           </div>
         ) : (
           <>
-            {messages.map((message) => {
+            {messages.map((message, index) => {
               const isOwn = message.senderId === currentUserId
+              const prevMessage = index > 0 ? messages[index - 1] : null
+              const isConsecutive = prevMessage && prevMessage.senderId === message.senderId
+              
               return (
                 <div
                   key={message.id}
-                  className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}
+                  className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'}`}
+                  style={{ marginBottom: isConsecutive ? '4px' : '12px' }}
                 >
                   <div
-                    className={`max-w-[75%] sm:max-w-xs lg:max-w-md px-3 sm:px-4 py-2 rounded-2xl ${
-                      isOwn
-                        ? 'bg-black text-white shadow-md'
-                        : 'bg-white text-black shadow-sm'
-                    }`}
+                    className="max-w-[75%] sm:max-w-xs lg:max-w-md"
+                    style={{
+                      minHeight: '40px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      backgroundColor: isOwn ? '#F0FDF4' : '#FFFFFF',
+                      borderRadius: '8px',
+                      padding: '8px 12px'
+                    }}
                   >
-                    <p className="wrap-break-word text-sm sm:text-base">{message.content}</p>
-                    <p
-                      className={`text-xs mt-1 flex items-center ${
-                        isOwn ? 'text-gray-300' : 'text-gray-500'
-                      }`}
-                    >
-                      <span>{formatTime(message.createdAt)}</span>
+                    <p className="wrap-break-word" style={{ fontSize: '12px', color: '#111625', lineHeight: '16px' }}>{message.content}</p>
+                  </div>
+                  <div className="flex items-center" style={{ marginTop: '4px', gap: '6px' }}>
+                    {isOwn && (
                       <MessageStatus
                         isOwn={isOwn}
                         deliveredAt={message.deliveredAt}
                         isRead={message.isRead}
                       />
-                    </p>
+                    )}
+                    <span style={{ fontSize: '12px', fontWeight: 400, lineHeight: '16px', color: '#8B8B8B' }}>{formatTime(message.createdAt)}</span>
                   </div>
                 </div>
               )
             })}
             {isTyping && (
               <div className="flex justify-start">
-                <div className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 rounded-2xl bg-white text-gray-700 max-w-[75%] sm:max-w-xs lg:max-w-md shadow-sm">
-                  <span className="text-sm leading-none">typing</span>
+                <div className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 max-w-[75%] sm:max-w-xs lg:max-w-md" style={{ backgroundColor: '#FFFFFF', borderRadius: '8px', height: '40px' }}>
+                  <span style={{ fontSize: '12px', color: '#111625', lineHeight: '16px' }}>typing</span>
                   <div className="flex items-center gap-1 h-5 pt-1">
                     <span
-                      className="w-1.5 h-1.5 bg-gray-600 rounded-full animate-bounce"
-                      style={{ animationDelay: '0ms' }}
+                      className="w-1.5 h-1.5 rounded-full animate-bounce"
+                      style={{ animationDelay: '0ms', backgroundColor: '#8B8B8B' }}
                     />
                     <span
-                      className="w-1.5 h-1.5 bg-gray-600 rounded-full animate-bounce"
-                      style={{ animationDelay: '150ms' }}
+                      className="w-1.5 h-1.5 rounded-full animate-bounce"
+                      style={{ animationDelay: '150ms', backgroundColor: '#8B8B8B' }}
                     />
                     <span
-                      className="w-1.5 h-1.5 bg-gray-600 rounded-full animate-bounce"
-                      style={{ animationDelay: '300ms' }}
+                      className="w-1.5 h-1.5 rounded-full animate-bounce"
+                      style={{ animationDelay: '300ms', backgroundColor: '#8B8B8B' }}
                     />
                   </div>
                 </div>
@@ -512,22 +532,40 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="p-3 sm:p-4 bg-white">
-        <div className="flex gap-2">
+      <div className="px-3 sm:px-4 pb-3 sm:pb-4" style={{ backgroundColor: '#FFFFFF', marginTop: '8px' }}>
+        <div className="relative flex items-center">
           <input
             type="text"
             placeholder="Type a message..."
             value={inputValue}
             onChange={handleInputChange}
             onKeyPress={handleKeyPress}
-            className="flex-1 px-4 sm:px-5 py-3 text-sm sm:text-base rounded-full focus:outline-none bg-gray-100 hover:bg-gray-50 focus:bg-gray-50 transition-colors"
+            className="w-full focus:outline-none transition-colors"
+            style={{
+              height: '40px',
+              paddingLeft: '16px',
+              paddingRight: '48px',
+              borderRadius: '9999px',
+              border: '1px solid #E8E5DF',
+              color: '#404040',
+              fontSize: '14px',
+              fontWeight: 400,
+              backgroundColor: '#FFFFFF'
+            }}
           />
           <button
             onClick={handleSend}
             disabled={!inputValue.trim() || aiStreaming}
-            className="px-5 sm:px-7 py-3 text-sm sm:text-base bg-black text-white rounded-full hover:bg-gray-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md"
+            className="absolute right-1 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+            style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '32px',
+              backgroundColor: '#1E9A80',
+              color: '#FFFFFF'
+            }}
           >
-            Send
+            <Send className="w-4 h-4" />
           </button>
         </div>
       </div>

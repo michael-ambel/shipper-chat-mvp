@@ -1,4 +1,5 @@
 import React from 'react'
+import { Check, CheckCheck } from 'lucide-react'
 
 interface MessageStatusProps {
   isOwn: boolean
@@ -11,24 +12,18 @@ export function MessageStatus({ isOwn, deliveredAt, isRead }: MessageStatusProps
 
   if (isRead) {
     return (
-      <span className="ml-2 text-[10px] sm:text-xs text-gray-400">
-        <span className="text-green-500">✓✓</span> Read
-      </span>
+      <CheckCheck style={{ width: '12px', height: '12px', color: '#1E9A80', flexShrink: 0 }} />
     )
   }
 
   if (deliveredAt) {
     return (
-      <span className="ml-2 text-[10px] sm:text-xs text-gray-400">
-        <span className="text-gray-400">✓✓</span> Delivered
-      </span>
+      <CheckCheck style={{ width: '12px', height: '12px', color: '#1E9A80', flexShrink: 0 }} />
     )
   }
 
   return (
-    <span className="ml-2 text-[10px] sm:text-xs text-gray-400">
-      <span className="text-gray-400">✓</span> Sent
-    </span>
+    <Check style={{ width: '12px', height: '12px', color: '#1E9A80', flexShrink: 0 }} />
   )
 }
 
