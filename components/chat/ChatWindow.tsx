@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { Socket } from 'socket.io-client'
 import { ChevronLeft, MessageCircleMore } from 'lucide-react'
 
@@ -31,7 +31,10 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
   const [inputValue, setInputValue] = useState('')
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [isTyping, setIsTyping] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const isTypingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
     if (selectedUserId) {
@@ -39,6 +42,17 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
     } else {
       setMessages([])
       setSessionId(null)
+    }
+
+    // Cleanup typing timeouts when switching users
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current)
+      }
+      if (isTypingTimeoutRef.current) {
+        clearTimeout(isTypingTimeoutRef.current)
+      }
+      setIsTyping(false)
     }
   }, [selectedUserId])
 
@@ -63,8 +77,36 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
         }
       })
 
+      socket.on('user_typing', (data) => {
+        if (data.userId === selectedUserId) {
+          setIsTyping(true)
+          
+          // Auto-clear typing indicator after 3 seconds
+          if (isTypingTimeoutRef.current) {
+            clearTimeout(isTypingTimeoutRef.current)
+          }
+          isTypingTimeoutRef.current = setTimeout(() => {
+            setIsTyping(false)
+          }, 3000)
+        }
+      })
+
+      socket.on('user_stop_typing', (data) => {
+        if (data.userId === selectedUserId) {
+          setIsTyping(false)
+          if (isTypingTimeoutRef.current) {
+            clearTimeout(isTypingTimeoutRef.current)
+          }
+        }
+      })
+
       return () => {
         socket.off('receive_message')
+        socket.off('user_typing')
+        socket.off('user_stop_typing')
+        if (isTypingTimeoutRef.current) {
+          clearTimeout(isTypingTimeoutRef.current)
+        }
       }
     }
   }, [socket, sessionId, selectedUserId, selectedUserName])
@@ -133,10 +175,40 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
     }
   }
 
+  const handleTyping = useCallback(() => {
+    if (!socket || !selectedUserId) return
+
+    // Emit typing event
+    socket.emit('typing', { recipientId: selectedUserId })
+
+    // Clear existing timeout
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current)
+    }
+
+    // Set timeout to emit stop_typing after 1500ms of inactivity
+    typingTimeoutRef.current = setTimeout(() => {
+      socket.emit('stop_typing', { recipientId: selectedUserId })
+    }, 1500)
+  }, [socket, selectedUserId])
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setInputValue(e.target.value)
+    handleTyping()
+  }
+
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       handleSend()
+      
+      // Stop typing indicator when sending
+      if (socket && selectedUserId) {
+        socket.emit('stop_typing', { recipientId: selectedUserId })
+        if (typingTimeoutRef.current) {
+          clearTimeout(typingTimeoutRef.current)
+        }
+      }
     }
   }
 
@@ -167,19 +239,21 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
 
   return (
     <div className="flex-1 flex flex-col bg-white">
-      <div className="p-4 border-b border-black flex items-center justify-between">
-        {isMobile && (
-          <button
-            onClick={onBack}
-            className="sm:hidden p-2 hover:bg-gray-100 rounded-full transition-colors"
-            aria-label="Back to users"
-          >
-            <ChevronLeft className="w-6 h-6" />
-          </button>
-        )}
-        <h2 className={`text-lg font-bold text-black ${isMobile ? 'ml-auto' : ''}`}>
-          {selectedUserName}
-        </h2>
+      <div className="border-b border-black">
+        <div className="p-4 flex items-center justify-between">
+          {isMobile && (
+            <button
+              onClick={onBack}
+              className="sm:hidden p-2 hover:bg-gray-100 rounded-full transition-colors"
+              aria-label="Back to users"
+            >
+              <ChevronLeft className="w-6 h-6" />
+            </button>
+          )}
+          <h2 className={`text-lg font-bold text-black ${isMobile ? 'ml-auto' : ''}`}>
+            {selectedUserName}
+          </h2>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3 sm:space-y-4">
@@ -200,32 +274,55 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
             </div>
           </div>
         ) : (
-          messages.map((message) => {
-            const isOwn = message.senderId === currentUserId
-            return (
-              <div
-                key={message.id}
-                className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}
-              >
+          <>
+            {messages.map((message) => {
+              const isOwn = message.senderId === currentUserId
+              return (
                 <div
-                  className={`max-w-[75%] sm:max-w-xs lg:max-w-md px-3 sm:px-4 py-2 rounded-2xl ${
-                    isOwn
-                      ? 'bg-black text-white'
-                      : 'bg-gray-200 text-black'
-                  }`}
+                  key={message.id}
+                  className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}
                 >
-                  <p className="break-words text-sm sm:text-base">{message.content}</p>
-                  <p
-                    className={`text-xs mt-1 ${
-                      isOwn ? 'text-gray-300' : 'text-gray-600'
+                  <div
+                    className={`max-w-[75%] sm:max-w-xs lg:max-w-md px-3 sm:px-4 py-2 rounded-2xl ${
+                      isOwn
+                        ? 'bg-black text-white'
+                        : 'bg-gray-200 text-black'
                     }`}
                   >
-                    {formatTime(message.createdAt)}
-                  </p>
+                    <p className="wrap-break-word text-sm sm:text-base">{message.content}</p>
+                    <p
+                      className={`text-xs mt-1 ${
+                        isOwn ? 'text-gray-300' : 'text-gray-600'
+                      }`}
+                    >
+                      {formatTime(message.createdAt)}
+                    </p>
+                  </div>
+                </div>
+              )
+            })}
+            {isTyping && (
+              <div className="flex justify-start">
+                <div className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 rounded-2xl bg-gray-200 text-gray-700 max-w-[75%] sm:max-w-xs lg:max-w-md">
+                  <span className="text-sm leading-none">typing</span>
+                  <div className="flex items-center gap-1 h-5 pt-1">
+                    <span
+                      className="w-1.5 h-1.5 bg-gray-600 rounded-full animate-bounce"
+                      style={{ animationDelay: '0ms' }}
+                    />
+                    <span
+                      className="w-1.5 h-1.5 bg-gray-600 rounded-full animate-bounce"
+                      style={{ animationDelay: '150ms' }}
+                    />
+                    <span
+                      className="w-1.5 h-1.5 bg-gray-600 rounded-full animate-bounce"
+                      style={{ animationDelay: '300ms' }}
+                    />
+                  </div>
                 </div>
               </div>
-            )
-          })
+            )}
+          </>
         )}
         <div ref={messagesEndRef} />
       </div>
@@ -236,7 +333,7 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
             type="text"
             placeholder="Type a message..."
             value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
+            onChange={handleInputChange}
             onKeyPress={handleKeyPress}
             className="flex-1 px-3 sm:px-4 py-2 text-sm sm:text-base border border-black rounded-full focus:outline-none focus:ring-2 focus:ring-black"
           />
