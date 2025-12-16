@@ -8,10 +8,9 @@ const { PrismaClient } = require('@prisma/client')
 const prisma = new PrismaClient()
 
 const dev = process.env.NODE_ENV !== 'production'
-const hostname = process.env.NODE_ENV === 'production' ? '0.0.0.0' : 'localhost'
 const port = parseInt(process.env.PORT || '3000', 10)
 
-const app = next({ dev, hostname, port })
+const app = next({ dev, port })
 const handle = app.getRequestHandler()
 
 const JWT_SECRET = process.env.JWT_SECRET || 'aeb6037bd8ddef01'
@@ -129,8 +128,8 @@ app.prepare().then(() => {
       console.error(err)
       process.exit(1)
     })
-    .listen(port, () => {
-      console.log(`> Ready on http://${hostname}:${port}`)
+    .listen(port, '0.0.0.0', () => {
+      console.log(`> Ready on port ${port}`)
     })
 })
 
