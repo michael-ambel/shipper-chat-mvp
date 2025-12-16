@@ -25,7 +25,15 @@ export async function GET(request: NextRequest) {
 
     const messages = await prisma.message.findMany({
       where: { sessionId },
-      include: {
+      select: {
+        id: true,
+        content: true,
+        senderId: true,
+        createdAt: true,
+        deliveredAt: true,
+        isRead: true,
+        readAt: true,
+        type: true,
         sender: {
           select: {
             id: true,
@@ -74,7 +82,15 @@ export async function POST(request: NextRequest) {
         content,
         type: 'text',
       },
-      include: {
+      select: {
+        id: true,
+        content: true,
+        senderId: true,
+        createdAt: true,
+        deliveredAt: true,
+        isRead: true,
+        readAt: true,
+        type: true,
         sender: {
           select: {
             id: true,

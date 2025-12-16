@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 import { useSocket } from '@/hooks/useSocket'
 import UserList from '@/components/chat/UserList'
 import ChatWindow from '@/components/chat/ChatWindow'
@@ -14,6 +15,7 @@ export default function ChatPage() {
   const [selectedUserName, setSelectedUserName] = useState<string | null>(null)
   const [users, setUsers] = useState<any[]>([])
   const [showChat, setShowChat] = useState(false)
+  const [refreshTrigger, setRefreshTrigger] = useState(0)
 
   const { socket, isConnected, onlineUsers } = useSocket(token)
 
@@ -21,6 +23,21 @@ export default function ChatPage() {
     fetchCurrentUser()
     fetchUsers()
   }, [])
+
+  // Listen for unread count changes via socket
+  useEffect(() => {
+    if (!socket) return
+
+    const handleUnreadCountChanged = () => {
+      setRefreshTrigger(prev => prev + 1)
+    }
+
+    socket.on('unread_count_changed', handleUnreadCountChanged)
+
+    return () => {
+      socket.off('unread_count_changed', handleUnreadCountChanged)
+    }
+  }, [socket])
 
   const fetchCurrentUser = async () => {
     try {
@@ -40,9 +57,15 @@ export default function ChatPage() {
         
         setToken(authToken || null)
       } else {
+        if (response.status === 401) {
+          toast.error('Your session has expired. Please sign in again.')
+        } else {
+          toast.error(data.error || 'Failed to load session. Please sign in again.')
+        }
         router.push('/login')
       }
     } catch (error) {
+      toast.error('Unable to verify session. Please sign in again.')
       router.push('/login')
     }
   }
@@ -58,6 +81,10 @@ export default function ChatPage() {
     }
   }
 
+  const handleUnreadChange = () => {
+    setRefreshTrigger(prev => prev + 1)
+  }
+
   const handleSelectUser = (userId: string) => {
     setSelectedUserId(userId)
     const user = users.find(u => u.id === userId)
@@ -65,22 +92,31 @@ export default function ChatPage() {
     setShowChat(true)
   }
 
+  const selectedUser = users.find(u => u.id === selectedUserId)
+
   const handleBackToUsers = () => {
     setShowChat(false)
   }
 
   const handleLogout = async () => {
     try {
-      await fetch('/api/auth/logout', { method: 'POST' })
+      const response = await fetch('/api/auth/logout', { method: 'POST' })
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        toast.error(data.error || 'Logout failed. Please try again.')
+        return
+      }
       localStorage.removeItem('auth-token')
+      toast.success('Logged out successfully')
       router.push('/login')
     } catch (error) {
+      toast.error('Logout failed. Please try again.')
     }
   }
 
   if (!currentUser) {
     return (
-      <div className="h-screen flex items-center justify-center bg-white">
+      <div className="h-screen flex items-center justify-center bg-gray-100">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-black mx-auto mb-4"></div>
           <p className="text-gray-600">Loading...</p>
@@ -90,11 +126,11 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-white">
-      <header className="border-b border-black bg-white p-3 sm:p-4 flex justify-between items-center">
+    <div className="h-screen flex flex-col bg-gray-100">
+      <header className="bg-gray-100 p-3 sm:p-4 flex justify-between items-center">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-black">Shipper Chat</h1>
-          <p className="text-xs sm:text-sm text-gray-600">
+          <p className="text-xs sm:text-sm text-gray-500">
             Welcome, {currentUser.name}
           </p>
         </div>
@@ -111,20 +147,21 @@ export default function ChatPage() {
           </div>
           <button
             onClick={handleLogout}
-            className="px-3 sm:px-4 py-2 border border-black rounded-full hover:bg-gray-100 transition-colors text-xs sm:text-sm font-medium"
+            className="px-3 sm:px-4 py-2 bg-white rounded-full hover:bg-gray-50 transition-colors text-xs sm:text-sm font-medium shadow-sm"
           >
             Logout
           </button>
         </div>
       </header>
 
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden gap-3 sm:gap-4 px-3 sm:px-4 pb-3 sm:pb-4">
         <div className={`${showChat ? 'hidden sm:flex' : 'flex'} w-full sm:w-80`}>
           <UserList
             onlineUsers={onlineUsers}
             onSelectUser={handleSelectUser}
             selectedUserId={selectedUserId}
             currentUserId={currentUser?.id}
+            refreshTrigger={refreshTrigger}
           />
         </div>
         <div className={`${showChat ? 'flex' : 'hidden sm:flex'} flex-1`}>
@@ -135,6 +172,8 @@ export default function ChatPage() {
             socket={socket}
             onBack={handleBackToUsers}
             isMobile={showChat}
+            onUnreadChange={handleUnreadChange}
+            isAI={selectedUser?.isAI}
           />
         </div>
       </div>

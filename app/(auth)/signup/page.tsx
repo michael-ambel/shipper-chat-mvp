@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { toast } from 'sonner'
 
 export default function SignupPage() {
   const router = useRouter()
@@ -15,19 +16,40 @@ export default function SignupPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+
+    const trimmedName = name.trim()
+    const trimmedEmail = email.trim()
+    const trimmedPassword = password.trim()
+
+    if (!trimmedName || !trimmedEmail || !trimmedPassword) {
+      const message = 'Name, email, and password are required'
+      setError(message)
+      toast.error(message)
+      return
+    }
+
+    if (trimmedPassword.length < 6) {
+      const message = 'Password must be at least 6 characters'
+      setError(message)
+      toast.error(message)
+      return
+    }
+
     setLoading(true)
 
     try {
       const response = await fetch('/api/auth/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password }),
+        body: JSON.stringify({ name: trimmedName, email: trimmedEmail, password: trimmedPassword }),
       })
 
       const data = await response.json()
 
       if (!response.ok) {
-        setError(data.error || 'Signup failed')
+        const message = data.error || 'Signup failed'
+        setError(message)
+        toast.error(message)
         return
       }
 
@@ -35,9 +57,12 @@ export default function SignupPage() {
         localStorage.setItem('auth-token', data.token)
       }
 
+      toast.success('Account created successfully')
       router.push('/chat')
     } catch (err) {
-      setError('Something went wrong. Please try again.')
+      const message = 'Something went wrong. Please try again.'
+      setError(message)
+      toast.error(message)
     } finally {
       setLoading(false)
     }
@@ -52,11 +77,6 @@ export default function SignupPage() {
           </h2>
         </div>
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          {error && (
-            <div className="bg-red-50 text-red-700 px-4 py-3 rounded-xl border border-red-400">
-              {error}
-            </div>
-          )}
           <div className="space-y-4">
             <div>
               <label htmlFor="name" className="block text-sm font-medium text-black">
