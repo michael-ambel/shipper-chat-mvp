@@ -115,6 +115,8 @@ export default function ChatPage() {
         <ChatWindow
           selectedUserId={selectedUserId}
           selectedUserName={selectedUserName}
+          currentUserId={currentUser?.id || null}
+          socket={socket}
         />
       </div>
     </div>
