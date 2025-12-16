@@ -35,3 +35,40 @@ input, button, textarea, select {
   -ms-overflow-style: none;  /* IE and Edge */
   scrollbar-width: none;  /* Firefox */
 }
+
+/* Auth page animations */
+@keyframes float {
+  0%, 100% { 
+    transform: translate(0, 0) scale(1); 
+  }
+  50% { 
+    transform: translate(30px, -30px) scale(1.1); 
+  }
+}
+
+@keyframes slideIn {
+  from { 
+    opacity: 0; 
+    transform: translateY(10px); 
+  }
+  to { 
+    opacity: 1; 
+    transform: translateY(0); 
+  }
+}
+
+.auth-float-1 {
+  animation: float 20s ease-in-out infinite;
+}
+
+.auth-float-2 {
+  animation: float 25s ease-in-out infinite reverse;
+}
+
+.auth-slide-in {
+  animation: slideIn 0.5s ease-out;
+}
+
+.auth-check-slide {
+  animation: slideIn 0.3s ease-out;
+}

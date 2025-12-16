@@ -116,10 +116,10 @@ export default function ChatPage() {
 
   if (!currentUser) {
     return (
-      <div className="h-screen flex items-center justify-center bg-gray-100">
+      <div className="h-screen flex items-center justify-center" style={{ backgroundColor: '#F3F3EE' }}>
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-black mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
+          <div className="animate-spin rounded-full h-8 w-8 border-2 mx-auto mb-3" style={{ borderColor: '#E8E5DF', borderTopColor: '#1E9A80' }}></div>
+          <p style={{ fontSize: '14px', fontWeight: 400, color: '#8B8B8B', lineHeight: '20px' }}>Loading...</p>
         </div>
       </div>
     )
@@ -141,7 +141,7 @@ export default function ChatPage() {
               style={{ backgroundColor: isConnected ? '#38C793' : '#8B8B8B' }}
             />
             <span style={{ fontSize: '14px', fontWeight: 400, color: '#8B8B8B', lineHeight: '150%', letterSpacing: '-0.01em' }}>
-              {isConnected ? 'Connected' : 'Disconnected'}
+              {isConnected ? 'Online' : 'Offline'}
             </span>
           </div>
           <button

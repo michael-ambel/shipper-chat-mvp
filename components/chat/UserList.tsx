@@ -84,8 +84,8 @@ export default function UserList({ onlineUsers, onSelectUser, selectedUserId, cu
     return (
       <div className="w-full p-4 flex items-center justify-center" style={{ backgroundColor: '#FFFFFF', borderRadius: '24px' }}>
         <div className="text-center">
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2 mx-auto mb-3" style={{ borderColor: '#1E9A80', borderTopColor: 'transparent' }}></div>
-          <p style={{ fontWeight: 400, color: '#8B8B8B', lineHeight: '150%', letterSpacing: '-0.01em' }}>Loading users...</p>
+          <div className="animate-spin rounded-full h-6 w-6 border-2 mx-auto mb-3" style={{ borderColor: '#E8E5DF', borderTopColor: '#1E9A80' }}></div>
+          <p style={{ fontSize: '12px', fontWeight: 400, color: '#8B8B8B', lineHeight: '16px' }}>Loading users...</p>
         </div>
       </div>
     )

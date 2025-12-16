@@ -406,11 +406,11 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
     return (
       <div className="flex-1 flex items-center justify-center" style={{ backgroundColor: '#FFFFFF', borderRadius: '24px' }}>
         <div className="text-center">
-          <MessageCircleMore className="w-10 h-10 mx-auto mb-4" style={{ color: '#8B8B8B' }} />
-          <h3 className="mb-2" style={{ fontSize: '14px', fontWeight: 500, color: '#09090B', lineHeight: '20px' }}>
+          <MessageCircleMore className="mx-auto mb-3" style={{ width: '32px', height: '32px', color: '#8B8B8B' }} />
+          <h3 className="mb-1" style={{ fontSize: '14px', fontWeight: 500, color: '#09090B', lineHeight: '20px' }}>
             Select a conversation
           </h3>
-          <p style={{ fontWeight: 400, color: '#8B8B8B', lineHeight: '150%', letterSpacing: '-0.01em' }}>
+          <p style={{ fontSize: '12px', fontWeight: 400, color: '#8B8B8B', lineHeight: '16px' }}>
             Choose a user from the list to start chatting
           </p>
         </div>
@@ -454,15 +454,15 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
         {loading ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-center">
-              <div className="animate-spin rounded-full h-10 w-10 border-b-2 mx-auto mb-3" style={{ borderColor: '#1E9A80', borderTopColor: 'transparent' }}></div>
-              <p style={{ fontWeight: 400, color: '#8B8B8B', lineHeight: '150%', letterSpacing: '-0.01em' }}>Loading messages...</p>
+              <div className="animate-spin rounded-full h-6 w-6 border-2 mx-auto mb-3" style={{ borderColor: '#E8E5DF', borderTopColor: '#1E9A80' }}></div>
+              <p style={{ fontSize: '12px', fontWeight: 400, color: '#8B8B8B', lineHeight: '16px' }}>Loading messages...</p>
             </div>
           </div>
         ) : messages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-center">
-              <MessageCircleMore className="w-10 h-10 mx-auto mb-3" style={{ color: '#8B8B8B' }} />
-              <p style={{ fontWeight: 400, color: '#8B8B8B', lineHeight: '150%', letterSpacing: '-0.01em' }}>
+              <MessageCircleMore className="mx-auto mb-3" style={{ width: '32px', height: '32px', color: '#8B8B8B' }} />
+              <p style={{ fontSize: '12px', fontWeight: 400, color: '#8B8B8B', lineHeight: '16px' }}>
                 No messages yet. Start the conversation!
               </p>
             </div>
