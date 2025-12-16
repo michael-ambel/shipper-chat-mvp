@@ -10,6 +10,13 @@ const prisma = new PrismaClient()
 const dev = process.env.NODE_ENV !== 'production'
 const port = parseInt(process.env.PORT || '3000', 10)
 
+console.log('Starting server with config:', {
+  NODE_ENV: process.env.NODE_ENV,
+  PORT: port,
+  DATABASE_URL: process.env.DATABASE_URL ? 'configured' : 'missing',
+  JWT_SECRET: process.env.JWT_SECRET ? 'configured' : 'using default',
+})
+
 const app = next({ dev, port })
 const handle = app.getRequestHandler()
 
@@ -17,6 +24,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'aeb6037bd8ddef01'
 const onlineUsers = new Map()
 
 app.prepare().then(() => {
+  console.log('Next.js app prepared successfully')
   const httpServer = createServer(async (req, res) => {
     try {
       const parsedUrl = parse(req.url, true)
@@ -125,11 +133,15 @@ app.prepare().then(() => {
 
   httpServer
     .once('error', (err) => {
-      console.error(err)
+      console.error('Server error:', err)
       process.exit(1)
     })
     .listen(port, '0.0.0.0', () => {
-      console.log(`> Ready on port ${port}`)
+      console.log(`> Ready on http://0.0.0.0:${port}`)
+      console.log('Server is listening and ready to accept connections')
     })
+}).catch((err) => {
+  console.error('Failed to prepare Next.js app:', err)
+  process.exit(1)
 })
 

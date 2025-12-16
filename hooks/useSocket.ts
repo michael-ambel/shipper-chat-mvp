@@ -17,7 +17,9 @@ export function useSocket(token: string | null): UseSocketReturn {
       return
     }
 
-    const socketUrl = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:3000'
+    const socketUrl = typeof window !== 'undefined' 
+      ? window.location.origin 
+      : 'http://localhost:3000'
     const socketInstance = io(socketUrl, {
       auth: { token },
       autoConnect: true,
