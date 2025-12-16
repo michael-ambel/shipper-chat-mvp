@@ -29,14 +29,16 @@ interface ChatWindowProps {
   onBack: () => void
   isMobile: boolean
   onUnreadChange?: () => void
+  isAI?: boolean
 }
 
-export default function ChatWindow({ selectedUserId, selectedUserName, currentUserId, socket, onBack, isMobile, onUnreadChange }: ChatWindowProps) {
+export default function ChatWindow({ selectedUserId, selectedUserName, currentUserId, socket, onBack, isMobile, onUnreadChange, isAI }: ChatWindowProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [inputValue, setInputValue] = useState('')
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [isTyping, setIsTyping] = useState(false)
+  const [aiStreaming, setAiStreaming] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const isTypingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -217,10 +219,89 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
   }
 
   const handleSend = async () => {
-    if (!inputValue.trim() || !sessionId || !socket) return
+    if (!inputValue.trim() || !sessionId) return
 
     const messageContent = inputValue.trim()
     setInputValue('')
+
+    // Handle AI chat
+    if (isAI) {
+      try {
+        // Add user message to UI
+        const userMessage: Message = {
+          id: Date.now().toString(),
+          content: messageContent,
+          senderId: currentUserId || '',
+          createdAt: new Date().toISOString(),
+          sender: {
+            id: currentUserId || '',
+            name: 'You',
+            email: '',
+            avatar: null,
+          },
+        }
+        setMessages((prev) => [...prev, userMessage])
+        setAiStreaming(true)
+
+        // Stream AI response
+        const response = await fetch('/api/ai/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId,
+            message: messageContent,
+          }),
+        })
+
+        if (!response.ok || !response.body) {
+          setAiStreaming(false)
+          return
+        }
+
+        // Create AI message placeholder
+        const aiMessageId = `ai-${Date.now()}`
+        const aiMessage: Message = {
+          id: aiMessageId,
+          content: '',
+          senderId: selectedUserId || '',
+          createdAt: new Date().toISOString(),
+          sender: {
+            id: selectedUserId || '',
+            name: selectedUserName || 'AI',
+            email: '',
+            avatar: null,
+          },
+        }
+        setMessages((prev) => [...prev, aiMessage])
+
+        // Stream the response
+        const reader = response.body.getReader()
+        const decoder = new TextDecoder()
+
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+
+          const chunk = decoder.decode(value)
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === aiMessageId
+                ? { ...m, content: m.content + chunk }
+                : m
+            )
+          )
+          scrollToBottom()
+        }
+
+        setAiStreaming(false)
+      } catch (error) {
+        setAiStreaming(false)
+      }
+      return
+    }
+
+    // Handle regular user chat
+    if (!socket) return
 
     try {
       const response = await fetch('/api/messages', {
@@ -322,13 +403,13 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
 
   if (!selectedUserId) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-white">
+      <div className="flex-1 flex items-center justify-center bg-white rounded-2xl">
         <div className="text-center">
           <MessageCircleMore className="w-10 h-10 mx-auto mb-4 text-gray-400" />
           <h3 className="text-xl font-medium text-black mb-2">
             Select a conversation
           </h3>
-          <p className="text-gray-600">
+          <p className="text-gray-500">
             Choose a user from the list to start chatting
           </p>
         </div>
@@ -337,9 +418,9 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
   }
 
   return (
-    <div className="flex-1 flex flex-col bg-white">
-      <div className="border-b border-black">
-        <div className="p-4 flex items-center justify-between">
+    <div className="flex-1 flex flex-col bg-white rounded-2xl overflow-hidden shadow-sm">
+      <div className="bg-white px-4 py-4">
+        <div className="flex items-center justify-between">
           {isMobile && (
             <button
               onClick={onBack}
@@ -355,7 +436,7 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3 sm:space-y-4">
+      <div className="flex-1 overflow-y-auto p-3 sm:p-5 space-y-3 sm:space-y-4 bg-white">
         {loading ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-center">
@@ -367,7 +448,7 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
           <div className="flex items-center justify-center h-full">
             <div className="text-center">
               <MessageCircleMore className="w-10 h-10 mx-auto mb-3 text-gray-400" />
-              <p className="text-gray-600">
+              <p className="text-gray-500">
                 No messages yet. Start the conversation!
               </p>
             </div>
@@ -384,14 +465,14 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
                   <div
                     className={`max-w-[75%] sm:max-w-xs lg:max-w-md px-3 sm:px-4 py-2 rounded-2xl ${
                       isOwn
-                        ? 'bg-black text-white'
-                        : 'bg-gray-200 text-black'
+                        ? 'bg-black text-white shadow-md'
+                        : 'bg-white text-black shadow-sm'
                     }`}
                   >
                     <p className="wrap-break-word text-sm sm:text-base">{message.content}</p>
                     <p
                       className={`text-xs mt-1 flex items-center ${
-                        isOwn ? 'text-gray-300' : 'text-gray-600'
+                        isOwn ? 'text-gray-300' : 'text-gray-500'
                       }`}
                     >
                       <span>{formatTime(message.createdAt)}</span>
@@ -407,7 +488,7 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
             })}
             {isTyping && (
               <div className="flex justify-start">
-                <div className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 rounded-2xl bg-gray-200 text-gray-700 max-w-[75%] sm:max-w-xs lg:max-w-md">
+                <div className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 rounded-2xl bg-white text-gray-700 max-w-[75%] sm:max-w-xs lg:max-w-md shadow-sm">
                   <span className="text-sm leading-none">typing</span>
                   <div className="flex items-center gap-1 h-5 pt-1">
                     <span
@@ -431,7 +512,7 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="p-3 sm:p-4 border-t border-black">
+      <div className="p-3 sm:p-4 bg-white">
         <div className="flex gap-2">
           <input
             type="text"
@@ -439,12 +520,12 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
             value={inputValue}
             onChange={handleInputChange}
             onKeyPress={handleKeyPress}
-            className="flex-1 px-3 sm:px-4 py-2 text-sm sm:text-base border border-black rounded-full focus:outline-none focus:ring-2 focus:ring-black"
+            className="flex-1 px-4 sm:px-5 py-3 text-sm sm:text-base rounded-full focus:outline-none bg-gray-100 hover:bg-gray-50 focus:bg-gray-50 transition-colors"
           />
           <button
             onClick={handleSend}
-            disabled={!inputValue.trim()}
-            className="px-4 sm:px-6 py-2 text-sm sm:text-base bg-black text-white rounded-full hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={!inputValue.trim() || aiStreaming}
+            className="px-5 sm:px-7 py-3 text-sm sm:text-base bg-black text-white rounded-full hover:bg-gray-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md"
           >
             Send
           </button>

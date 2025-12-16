@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { BotMessageSquare } from 'lucide-react'
 
 interface User {
   id: string
@@ -57,7 +58,10 @@ export default function UserList({ onlineUsers, onSelectUser, selectedUserId, cu
       .slice(0, 2)
   }
 
-  const isOnline = (userId: string) => onlineUsers.includes(userId)
+  const isOnline = (userId: string, isAI: boolean) => {
+    if (isAI) return true
+    return onlineUsers.includes(userId)
+  }
 
   const formatLastSeen = (lastSeen: string | null | undefined) => {
     if (!lastSeen) return 'recently'
@@ -78,7 +82,7 @@ export default function UserList({ onlineUsers, onSelectUser, selectedUserId, cu
 
   if (loading) {
     return (
-      <div className="w-full border-r border-black bg-white p-4 flex items-center justify-center">
+      <div className="w-full bg-gray-100 rounded-2xl p-4 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-black mx-auto mb-3"></div>
           <p className="text-gray-600">Loading users...</p>
@@ -87,24 +91,25 @@ export default function UserList({ onlineUsers, onSelectUser, selectedUserId, cu
     )
   }
 
-  const otherOnlineCount = onlineUsers.filter(id => id !== currentUserId).length
+  const aiUsersCount = users.filter(u => u.isAI).length
+  const otherOnlineCount = onlineUsers.filter(id => id !== currentUserId).length + aiUsersCount
 
   return (
-    <div className="w-full border-r border-black bg-white flex flex-col">
-      <div className="p-4 border-b border-black">
+    <div className="w-full bg-gray-100 rounded-2xl flex flex-col overflow-hidden">
+      <div className="p-4 pb-3">
         <h2 className="text-xl font-bold text-black">Messages</h2>
-        <p className="text-sm text-gray-600 mt-1">
+        <p className="text-sm text-gray-500 mt-1">
           {otherOnlineCount} online
         </p>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto px-2">
         {users.length === 0 ? (
           <div className="p-4 text-center text-gray-600">
             No users found
           </div>
         ) : (
-          <div className="divide-y divide-gray-200">
+          <div className="space-y-1">
             {users.map((user) => (
               <button
                 key={user.id}
@@ -119,31 +124,46 @@ export default function UserList({ onlineUsers, onSelectUser, selectedUserId, cu
                     )
                   }
                 }}
-                className={`w-full p-4 flex items-center gap-3 hover:bg-gray-100 transition-colors ${
-                  selectedUserId === user.id ? 'bg-gray-100' : ''
+                className={`w-full p-3 flex items-center gap-3 rounded-xl transition-all ${
+                  selectedUserId === user.id 
+                    ? 'bg-white shadow-sm' 
+                    : 'hover:bg-white/50'
                 }`}
               >
                 <div className="relative">
-                  <div className="w-12 h-12 rounded-full bg-black text-white flex items-center justify-center font-medium">
-                    {getInitials(user.name)}
-                  </div>
-                  <div
-                    className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white ${
-                      isOnline(user.id) ? 'bg-green-500' : 'bg-gray-400'
-                    }`}
-                  />
+                  {user.isAI ? (
+                    <>
+                      <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-white flex items-center justify-center">
+                        <BotMessageSquare className="w-6 h-6" />
+                      </div>
+                      <div className="absolute bottom-0 right-0 w-3 h-3 min-w-[12px] min-h-[12px] rounded-full border-2 border-white bg-green-500 flex-shrink-0" />
+                    </>
+                  ) : (
+                    <>
+                      <div className="w-12 h-12 rounded-full bg-black text-white flex items-center justify-center font-medium">
+                        {getInitials(user.name)}
+                      </div>
+                      <div
+                        className={`absolute bottom-0 right-0 w-3 h-3 min-w-[12px] min-h-[12px] rounded-full border-2 border-white flex-shrink-0 ${
+                          isOnline(user.id, user.isAI) ? 'bg-green-500' : 'bg-gray-400'
+                        }`}
+                      />
+                    </>
+                  )}
                 </div>
                 <div className="flex-1 text-left">
-                  <div className="font-medium text-black">{user.name}</div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-black">{user.name}</span>
+                  </div>
                   <div className="text-xs text-gray-500 truncate">
-                    {isOnline(user.id) 
+                    {isOnline(user.id, user.isAI) 
                       ? 'Online' 
                       : `Last seen ${formatLastSeen(user.lastSeen)}`
                     }
                   </div>
                 </div>
-                {user.unreadCount && user.unreadCount > 0 && (
-                  <div className="ml-2 flex items-center justify-center min-w-5 h-5 px-2 rounded-full bg-green-500 text-white text-xs font-semibold">
+                {typeof user.unreadCount === 'number' && user.unreadCount > 0 && (
+                  <div className="ml-2 flex items-center justify-center min-w-[20px] w-auto h-5 px-1.5 rounded-full bg-green-500 text-white text-xs font-semibold flex-shrink-0">
                     {user.unreadCount}
                   </div>
                 )}

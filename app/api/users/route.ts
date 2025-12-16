@@ -16,7 +16,6 @@ export async function GET() {
     const users = await prisma.user.findMany({
       where: {
         id: { not: currentUser.userId },
-        isAI: false,
       },
       select: {
         id: true,
@@ -26,9 +25,10 @@ export async function GET() {
         lastSeen: true,
         isAI: true,
       },
-      orderBy: {
-        name: 'asc',
-      },
+      orderBy: [
+        { isAI: 'desc' }, // AI assistant first
+        { name: 'asc' },
+      ],
     })
 
     const usersWithUnread = await Promise.all(

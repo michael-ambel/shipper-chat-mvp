@@ -92,6 +92,8 @@ export default function ChatPage() {
     setShowChat(true)
   }
 
+  const selectedUser = users.find(u => u.id === selectedUserId)
+
   const handleBackToUsers = () => {
     setShowChat(false)
   }
@@ -114,7 +116,7 @@ export default function ChatPage() {
 
   if (!currentUser) {
     return (
-      <div className="h-screen flex items-center justify-center bg-white">
+      <div className="h-screen flex items-center justify-center bg-gray-100">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-black mx-auto mb-4"></div>
           <p className="text-gray-600">Loading...</p>
@@ -124,11 +126,11 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-white">
-      <header className="border-b border-black bg-white p-3 sm:p-4 flex justify-between items-center">
+    <div className="h-screen flex flex-col bg-gray-100">
+      <header className="bg-gray-100 p-3 sm:p-4 flex justify-between items-center">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-black">Shipper Chat</h1>
-          <p className="text-xs sm:text-sm text-gray-600">
+          <p className="text-xs sm:text-sm text-gray-500">
             Welcome, {currentUser.name}
           </p>
         </div>
@@ -145,14 +147,14 @@ export default function ChatPage() {
           </div>
           <button
             onClick={handleLogout}
-            className="px-3 sm:px-4 py-2 border border-black rounded-full hover:bg-gray-100 transition-colors text-xs sm:text-sm font-medium"
+            className="px-3 sm:px-4 py-2 bg-white rounded-full hover:bg-gray-50 transition-colors text-xs sm:text-sm font-medium shadow-sm"
           >
             Logout
           </button>
         </div>
       </header>
 
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden gap-3 sm:gap-4 px-3 sm:px-4 pb-3 sm:pb-4">
         <div className={`${showChat ? 'hidden sm:flex' : 'flex'} w-full sm:w-80`}>
           <UserList
             onlineUsers={onlineUsers}
@@ -171,6 +173,7 @@ export default function ChatPage() {
             onBack={handleBackToUsers}
             isMobile={showChat}
             onUnreadChange={handleUnreadChange}
+            isAI={selectedUser?.isAI}
           />
         </div>
       </div>
