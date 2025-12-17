@@ -169,6 +169,78 @@ app.prepare().then(() => {
       }
     })
 
+    // Edit message - broadcast to recipient
+    socket.on('edit_message', async (data) => {
+      const { messageId, content, recipientId, sessionId } = data
+
+      if (!messageId || !content) return
+
+      const recipientSocketId = onlineUsers.get(recipientId)
+
+      if (recipientSocketId) {
+        io.to(recipientSocketId).emit('message_edited', {
+          messageId,
+          content,
+          editedAt: new Date().toISOString(),
+          sessionId,
+        })
+      }
+    })
+
+    // Delete message - broadcast to recipient
+    socket.on('delete_message', async (data) => {
+      const { messageId, recipientId, sessionId } = data
+
+      if (!messageId) return
+
+      const recipientSocketId = onlineUsers.get(recipientId)
+
+      if (recipientSocketId) {
+        io.to(recipientSocketId).emit('message_deleted', {
+          messageId,
+          sessionId,
+        })
+      }
+    })
+
+    // Add reaction - broadcast to recipient
+    socket.on('add_reaction', async (data) => {
+      const { messageId, emoji, recipientId, sessionId, reaction, replaced } = data
+
+      if (!messageId || !emoji) return
+
+      const recipientSocketId = onlineUsers.get(recipientId)
+
+      if (recipientSocketId) {
+        io.to(recipientSocketId).emit('reaction_added', {
+          messageId,
+          emoji,
+          userId,
+          sessionId,
+          reaction,
+          replaced,
+        })
+      }
+    })
+
+    // Remove reaction - broadcast to recipient
+    socket.on('remove_reaction', async (data) => {
+      const { messageId, emoji, recipientId, sessionId } = data
+
+      if (!messageId || !emoji) return
+
+      const recipientSocketId = onlineUsers.get(recipientId)
+
+      if (recipientSocketId) {
+        io.to(recipientSocketId).emit('reaction_removed', {
+          messageId,
+          emoji,
+          userId,
+          sessionId,
+        })
+      }
+    })
+
     socket.on('disconnect', async () => {
       onlineUsers.delete(userId)
       

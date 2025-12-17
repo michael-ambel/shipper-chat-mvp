@@ -23,10 +23,11 @@ model User {
   lastSeen  DateTime?
   createdAt DateTime @default(now())
 
-  sessionsAsUser1 ChatSession[] @relation("User1Sessions")
-  sessionsAsUser2 ChatSession[] @relation("User2Sessions")
+  sessionsAsUser1 ChatSession[]        @relation("User1Sessions")
+  sessionsAsUser2 ChatSession[]        @relation("User2Sessions")
   messages        Message[]
   participants    SessionParticipant[]
+  reactions       Reaction[]
 }
 
 model ChatSession {
@@ -50,23 +51,43 @@ model ChatSession {
 }
 
 model Message {
-  id          String   @id @default(uuid()) @db.Uuid
-  sessionId   String   @db.Uuid
-  senderId    String   @db.Uuid
+  id          String    @id @default(uuid()) @db.Uuid
+  sessionId   String    @db.Uuid
+  senderId    String    @db.Uuid
   content     String
-  type        String   @default("text")
-  isRead      Boolean  @default(false)
+  type        String    @default("text")
+  isRead      Boolean   @default(false)
   deliveredAt DateTime?
   readAt      DateTime?
   metadata    Json?
-  createdAt   DateTime @default(now())
+  isEdited    Boolean   @default(false)
+  editedAt    DateTime?
+  isDeleted   Boolean   @default(false)
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
 
-  session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  sender  User        @relation(fields: [senderId], references: [id])
+  session   ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sender    User        @relation(fields: [senderId], references: [id])
+  reactions Reaction[]
 
   @@index([sessionId])
   @@index([senderId])
   @@index([createdAt])
+}
+
+model Reaction {
+  id        String   @id @default(uuid()) @db.Uuid
+  messageId String   @db.Uuid
+  userId    String   @db.Uuid
+  emoji     String
+  createdAt DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@unique([messageId, userId, emoji])
+  @@index([messageId])
+  @@index([userId])
 }
 
 model SessionParticipant {

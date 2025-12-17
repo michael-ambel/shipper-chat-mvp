@@ -34,12 +34,28 @@ export async function GET(request: NextRequest) {
         isRead: true,
         readAt: true,
         type: true,
+        isEdited: true,
+        editedAt: true,
+        isDeleted: true,
         sender: {
           select: {
             id: true,
             name: true,
             email: true,
             avatar: true,
+          },
+        },
+        reactions: {
+          select: {
+            id: true,
+            emoji: true,
+            userId: true,
+            user: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
           },
         },
       },

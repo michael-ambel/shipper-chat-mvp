@@ -2,8 +2,21 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { Socket } from 'socket.io-client'
-import { ChevronLeft, MessageCircleMore, Send, Search, Phone, Video, MoreVertical, BotMessageSquare } from 'lucide-react'
+import { ChevronLeft, MessageCircleMore, Send, Search, Phone, Video, MoreVertical, BotMessageSquare, X, Check } from 'lucide-react'
 import { MessageStatus } from './MessageStatus'
+import MessageActions from './MessageActions'
+import MessageReactions from './MessageReactions'
+import ConfirmModal from '../ui/ConfirmModal'
+
+interface Reaction {
+  id: string
+  emoji: string
+  userId: string
+  user: {
+    id: string
+    name: string
+  }
+}
 
 interface Message {
   id: string
@@ -13,6 +26,10 @@ interface Message {
   deliveredAt?: string | null
   isRead?: boolean | null
   readAt?: string | null
+  isEdited?: boolean
+  editedAt?: string | null
+  isDeleted?: boolean
+  reactions?: Reaction[]
   sender: {
     id: string
     name: string
@@ -40,9 +57,15 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
   const [loading, setLoading] = useState(false)
   const [isTyping, setIsTyping] = useState(false)
   const [aiStreaming, setAiStreaming] = useState(false)
+  const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null)
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
+  const [editContent, setEditContent] = useState('')
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [messageToDelete, setMessageToDelete] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const isTypingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const editInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (selectedUserId) {
@@ -88,12 +111,82 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
       )
     }
 
+    const handleMessageEdited = (data: any) => {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === data.messageId
+            ? { ...m, content: data.content, isEdited: true, editedAt: data.editedAt }
+            : m
+        )
+      )
+    }
+
+    const handleMessageDeleted = (data: any) => {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === data.messageId
+            ? { ...m, isDeleted: true, content: '' }
+            : m
+        )
+      )
+    }
+
+    const handleReactionAdded = (data: any) => {
+      setMessages((prev) =>
+        prev.map((m) => {
+          if (m.id !== data.messageId) return m
+          const newReaction: Reaction = {
+            id: data.reaction?.id || Date.now().toString(),
+            emoji: data.emoji,
+            userId: data.userId,
+            user: data.reaction?.user || { id: data.userId, name: 'User' },
+          }
+          
+          // For 1-1 chats (replaced=true): remove any existing reaction from this user first
+          let existingReactions = m.reactions || []
+          if (data.replaced) {
+            existingReactions = existingReactions.filter(
+              (r) => r.userId !== data.userId
+            )
+          }
+          
+          const alreadyExists = existingReactions.some(
+            (r) => r.userId === data.userId && r.emoji === data.emoji
+          )
+          if (alreadyExists) return m
+          return { ...m, reactions: [...existingReactions, newReaction] }
+        })
+      )
+    }
+
+    const handleReactionRemoved = (data: any) => {
+      setMessages((prev) =>
+        prev.map((m) => {
+          if (m.id !== data.messageId) return m
+          return {
+            ...m,
+            reactions: (m.reactions || []).filter(
+              (r) => !(r.userId === data.userId && r.emoji === data.emoji)
+            ),
+          }
+        })
+      )
+    }
+
     socket.on('message_delivered', handleMessageDelivered)
     socket.on('message_read', handleMessageRead)
+    socket.on('message_edited', handleMessageEdited)
+    socket.on('message_deleted', handleMessageDeleted)
+    socket.on('reaction_added', handleReactionAdded)
+    socket.on('reaction_removed', handleReactionRemoved)
 
     return () => {
       socket.off('message_delivered', handleMessageDelivered)
       socket.off('message_read', handleMessageRead)
+      socket.off('message_edited', handleMessageEdited)
+      socket.off('message_deleted', handleMessageDeleted)
+      socket.off('reaction_added', handleReactionAdded)
+      socket.off('reaction_removed', handleReactionRemoved)
     }
   }, [socket])
 
@@ -373,6 +466,206 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
     }
   }
 
+  const handleStartEdit = (message: Message) => {
+    setEditingMessageId(message.id)
+    setEditContent(message.content)
+    setTimeout(() => editInputRef.current?.focus(), 0)
+  }
+
+  const handleCancelEdit = () => {
+    setEditingMessageId(null)
+    setEditContent('')
+  }
+
+  const handleSaveEdit = async () => {
+    if (!editingMessageId || !editContent.trim()) return
+
+    try {
+      const response = await fetch(`/api/messages/${editingMessageId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: editContent.trim() }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === editingMessageId
+              ? { ...m, content: data.message.content, isEdited: true, editedAt: data.message.editedAt }
+              : m
+          )
+        )
+
+        // Broadcast to recipient
+        if (socket && selectedUserId) {
+          socket.emit('edit_message', {
+            messageId: editingMessageId,
+            content: data.message.content,
+            recipientId: selectedUserId,
+            sessionId,
+          })
+        }
+      }
+    } catch (error) {
+    } finally {
+      handleCancelEdit()
+    }
+  }
+
+  const handleDeleteMessage = (messageId: string) => {
+    setMessageToDelete(messageId)
+    setDeleteModalOpen(true)
+  }
+
+  const confirmDeleteMessage = async () => {
+    if (!messageToDelete) return
+
+    try {
+      const response = await fetch(`/api/messages/${messageToDelete}`, {
+        method: 'DELETE',
+      })
+
+      if (response.ok) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === messageToDelete ? { ...m, isDeleted: true, content: '' } : m
+          )
+        )
+
+        // Broadcast to recipient
+        if (socket && selectedUserId) {
+          socket.emit('delete_message', {
+            messageId: messageToDelete,
+            recipientId: selectedUserId,
+            sessionId,
+          })
+        }
+      }
+    } catch (error) {
+    } finally {
+      setDeleteModalOpen(false)
+      setMessageToDelete(null)
+    }
+  }
+
+  const handleAddReaction = async (messageId: string, emoji: string) => {
+    try {
+      const response = await fetch(`/api/messages/${messageId}/reactions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ emoji }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        const newReaction: Reaction = {
+          id: data.reaction.id,
+          emoji: data.reaction.emoji,
+          userId: data.reaction.userId,
+          user: data.reaction.user,
+        }
+
+        setMessages((prev) =>
+          prev.map((m) => {
+            if (m.id !== messageId) return m
+            
+            // For 1-1 chats (replaced=true): remove any existing reaction from this user first
+            let existingReactions = m.reactions || []
+            if (data.replaced) {
+              existingReactions = existingReactions.filter(
+                (r) => r.userId !== currentUserId
+              )
+            }
+            
+            // Check if same emoji already exists (shouldn't happen but safety check)
+            const alreadyExists = existingReactions.some(
+              (r) => r.userId === currentUserId && r.emoji === emoji
+            )
+            if (alreadyExists) return m
+            
+            return { ...m, reactions: [...existingReactions, newReaction] }
+          })
+        )
+
+        // Broadcast to recipient
+        if (socket && selectedUserId) {
+          socket.emit('add_reaction', {
+            messageId,
+            emoji,
+            recipientId: selectedUserId,
+            sessionId,
+            reaction: newReaction,
+            replaced: data.replaced,
+          })
+        }
+      }
+    } catch (error) {
+    }
+  }
+
+  const handleRemoveReaction = async (messageId: string, emoji: string) => {
+    try {
+      const response = await fetch(`/api/messages/${messageId}/reactions?emoji=${encodeURIComponent(emoji)}`, {
+        method: 'DELETE',
+      })
+
+      if (response.ok) {
+        setMessages((prev) =>
+          prev.map((m) => {
+            if (m.id !== messageId) return m
+            return {
+              ...m,
+              reactions: (m.reactions || []).filter(
+                (r) => !(r.userId === currentUserId && r.emoji === emoji)
+              ),
+            }
+          })
+        )
+
+        // Broadcast to recipient
+        if (socket && selectedUserId) {
+          socket.emit('remove_reaction', {
+            messageId,
+            emoji,
+            recipientId: selectedUserId,
+            sessionId,
+          })
+        }
+      }
+    } catch (error) {
+    }
+  }
+
+  const handleToggleReaction = (messageId: string, emoji: string, hasReacted: boolean) => {
+    if (hasReacted) {
+      handleRemoveReaction(messageId, emoji)
+    } else {
+      handleAddReaction(messageId, emoji)
+    }
+  }
+
+  const getGroupedReactions = (reactions: Reaction[] | undefined) => {
+    if (!reactions || reactions.length === 0) return []
+
+    const grouped: { [emoji: string]: { users: { id: string; name: string }[]; count: number } } = {}
+
+    reactions.forEach((r) => {
+      if (!grouped[r.emoji]) {
+        grouped[r.emoji] = { users: [], count: 0 }
+      }
+      grouped[r.emoji].users.push(r.user)
+      grouped[r.emoji].count++
+    })
+
+    return Object.entries(grouped).map(([emoji, data]) => ({
+      emoji,
+      count: data.count,
+      users: data.users,
+      hasReacted: data.users.some((u) => u.id === currentUserId),
+    }))
+  }
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInputValue(e.target.value)
     handleTyping()
@@ -569,35 +862,114 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
               const isOwn = message.senderId === currentUserId
               const prevMessage = index > 0 ? messages[index - 1] : null
               const isConsecutive = prevMessage && prevMessage.senderId === message.senderId
+              const isEditing = editingMessageId === message.id
+              const groupedReactions = getGroupedReactions(message.reactions)
               
               return (
                 <div
                   key={message.id}
                   className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'}`}
                   style={{ marginBottom: isConsecutive ? '4px' : '12px' }}
+                  onMouseEnter={() => setHoveredMessageId(message.id)}
+                  onMouseLeave={() => setHoveredMessageId(null)}
                 >
-                  <div
-                    className="max-w-[75%] sm:max-w-xs lg:max-w-md"
-                    style={{
-                      minHeight: '40px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      backgroundColor: isOwn ? '#F0FDF4' : '#FFFFFF',
-                      borderRadius: '8px',
-                      padding: '8px 12px'
-                    }}
-                  >
-                    <p className="wrap-break-word" style={{ fontSize: '12px', color: '#111625', lineHeight: '16px' }}>{message.content}</p>
+                  <div className="relative">
+                    {isEditing ? (
+                      <div
+                        className="flex items-center gap-2"
+                        style={{ minWidth: '200px' }}
+                      >
+                        <input
+                          ref={editInputRef}
+                          type="text"
+                          value={editContent}
+                          onChange={(e) => setEditContent(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleSaveEdit()
+                            if (e.key === 'Escape') handleCancelEdit()
+                          }}
+                          className="flex-1 px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 focus:ring-green-500"
+                          style={{
+                            fontSize: '12px',
+                            borderColor: '#E8E5DF',
+                            backgroundColor: '#FFFFFF',
+                          }}
+                        />
+                        <button
+                          onClick={handleSaveEdit}
+                          className="w-7 h-7 flex items-center justify-center rounded-full bg-green-500 text-white hover:bg-green-600 transition-colors"
+                        >
+                          <Check size={14} />
+                        </button>
+                        <button
+                          onClick={handleCancelEdit}
+                          className="w-7 h-7 flex items-center justify-center rounded-full bg-gray-200 hover:bg-gray-300 transition-colors"
+                        >
+                          <X size={14} color="#6B7280" />
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <div
+                          className="relative max-w-[75%] sm:max-w-xs lg:max-w-md"
+                          style={{
+                            minHeight: '40px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            backgroundColor: message.isDeleted ? '#F3F4F6' : isOwn ? '#F0FDF4' : '#FFFFFF',
+                            borderRadius: '8px',
+                            padding: '8px 12px',
+                            opacity: message.isDeleted ? 0.7 : 1,
+                            marginBottom: groupedReactions.length > 0 ? '8px' : 0,
+                          }}
+                        >
+                          {message.isDeleted ? (
+                            <p className="italic" style={{ fontSize: '12px', color: '#9CA3AF', lineHeight: '16px' }}>
+                              This message was deleted
+                            </p>
+                          ) : (
+                            <p className="wrap-break-word" style={{ fontSize: '12px', color: '#111625', lineHeight: '16px' }}>
+                              {message.content}
+                            </p>
+                          )}
+                          {/* Reactions - positioned at bottom corner of message */}
+                          {!message.isDeleted && groupedReactions.length > 0 && (
+                            <MessageReactions
+                              reactions={groupedReactions}
+                              onToggleReaction={(emoji, hasReacted) =>
+                                handleToggleReaction(message.id, emoji, hasReacted)
+                              }
+                              isOwn={isOwn}
+                            />
+                          )}
+                        </div>
+                        {!isAI && (
+                          <MessageActions
+                            isOwn={isOwn}
+                            isDeleted={message.isDeleted || false}
+                            onEdit={() => handleStartEdit(message)}
+                            onDelete={() => handleDeleteMessage(message.id)}
+                            onReact={(emoji) => handleAddReaction(message.id, emoji)}
+                            show={hoveredMessageId === message.id}
+                          />
+                        )}
+                      </>
+                    )}
                   </div>
                   <div className="flex items-center" style={{ marginTop: '4px', gap: '6px' }}>
-                    {isOwn && (
+                    {isOwn && !message.isDeleted && (
                       <MessageStatus
                         isOwn={isOwn}
                         deliveredAt={message.deliveredAt}
                         isRead={message.isRead}
                       />
                     )}
-                    <span style={{ fontSize: '12px', fontWeight: 400, lineHeight: '16px', color: '#8B8B8B' }}>{formatTime(message.createdAt)}</span>
+                    <span style={{ fontSize: '12px', fontWeight: 400, lineHeight: '16px', color: '#8B8B8B' }}>
+                      {formatTime(message.createdAt)}
+                      {message.isEdited && !message.isDeleted && (
+                        <span className="ml-1" style={{ fontStyle: 'italic' }}>(edited)</span>
+                      )}
+                    </span>
                   </div>
                 </div>
               )
@@ -665,6 +1037,21 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
           </button>
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        isOpen={deleteModalOpen}
+        title="Delete Message"
+        message="Are you sure you want to delete this message? This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={confirmDeleteMessage}
+        onCancel={() => {
+          setDeleteModalOpen(false)
+          setMessageToDelete(null)
+        }}
+        variant="danger"
+      />
     </div>
   )
 }
