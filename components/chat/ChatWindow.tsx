@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { Socket } from 'socket.io-client'
-import { ChevronLeft, MessageCircleMore, Send } from 'lucide-react'
+import { ChevronLeft, MessageCircleMore, Send, Search, Phone, Video, MoreVertical, BotMessageSquare } from 'lucide-react'
 import { MessageStatus } from './MessageStatus'
 
 interface Message {
@@ -418,12 +418,25 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
     )
   }
 
-  const isOnline = selectedUserId && onlineUsers?.includes(selectedUserId)
+  const isOnline = isAI || (selectedUserId && onlineUsers?.includes(selectedUserId))
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden" style={{ backgroundColor: '#FFFFFF', borderRadius: '24px' }}>
-      <div className="px-4 py-4" style={{ backgroundColor: '#FFFFFF' }}>
-        <div className="flex items-center justify-between">
+    <div className="flex-1 flex flex-col overflow-hidden" style={{ backgroundColor: '#FFFFFF', borderRadius: '24px', padding: '12px' }}>
+      {/* Header */}
+      <div 
+        className="flex items-center justify-between"
+        style={{ 
+          width: '100%',
+          height: '60px',
+          paddingTop: '4px',
+          paddingRight: '12px',
+          paddingBottom: '16px',
+          paddingLeft: '12px',
+          gap: '12px',
+        }}
+      >
+        {/* Left - User Info */}
+        <div className="flex items-center" style={{ gap: '12px' }}>
           {isMobile && (
             <button
               onClick={onBack}
@@ -439,18 +452,101 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
               <ChevronLeft style={{ width: '16px', height: '16px', color: '#28303F' }} />
             </button>
           )}
-          <div className="flex items-center gap-2">
-            <h2 className={`${isMobile ? 'ml-auto' : ''}`} style={{ fontSize: '14px', fontWeight: 500, color: '#111625', lineHeight: '20px', letterSpacing: '-0.006em' }}>
+          {/* User Avatar */}
+          {isAI ? (
+            <div 
+              className="rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-white flex items-center justify-center"
+              style={{ 
+                width: '40px', 
+                height: '40px', 
+                flexShrink: 0,
+              }}
+            >
+              <BotMessageSquare className="w-5 h-5" />
+            </div>
+          ) : (
+            <div 
+              className="rounded-full flex items-center justify-center font-medium"
+              style={{ 
+                width: '40px', 
+                height: '40px', 
+                backgroundColor: '#F7F9FB', 
+                color: '#111625',
+                flexShrink: 0,
+              }}
+            >
+              {selectedUserName?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+            </div>
+          )}
+          {/* Name and Status */}
+          <div className="flex flex-col" style={{ gap: '2px' }}>
+            <h2 style={{ fontSize: '14px', fontWeight: 500, color: '#111625', lineHeight: '20px', letterSpacing: '-0.006em' }}>
               {selectedUserName}
             </h2>
-            <span style={{ fontSize: '14px', fontWeight: 500, color: isOnline ? '#38C793' : '#8B8B8B', lineHeight: '16px' }}>
+            <span style={{ fontSize: '12px', fontWeight: 400, color: isOnline ? '#38C793' : '#8B8B8B', lineHeight: '16px' }}>
               {isOnline ? 'Online' : 'Offline'}
             </span>
           </div>
         </div>
+
+        {/* Right - Action Buttons */}
+        <div className="flex items-center" style={{ height: '32px', gap: '12px' }}>
+          <button
+            className="flex items-center justify-center transition-opacity hover:opacity-70"
+            style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '8px',
+              border: '1px solid #E8E5DF',
+              backgroundColor: '#FFFFFF',
+              gap: '4px',
+            }}
+          >
+            <Search size={16} color="#262626" />
+          </button>
+          <button
+            className="flex items-center justify-center transition-opacity hover:opacity-70"
+            style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '8px',
+              border: '1px solid #E8E5DF',
+              backgroundColor: '#FFFFFF',
+              gap: '4px',
+            }}
+          >
+            <Phone size={16} color="#262626" />
+          </button>
+          <button
+            className="flex items-center justify-center transition-opacity hover:opacity-70"
+            style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '8px',
+              border: '1px solid #E8E5DF',
+              backgroundColor: '#FFFFFF',
+              gap: '4px',
+            }}
+          >
+            <Video size={16} color="#262626" />
+          </button>
+          <button
+            className="flex items-center justify-center transition-opacity hover:opacity-70"
+            style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '8px',
+              border: '1px solid #E8E5DF',
+              backgroundColor: '#FFFFFF',
+              gap: '4px',
+            }}
+          >
+            <MoreVertical size={16} color="#262626" />
+          </button>
+        </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 scrollbar-hide" style={{ backgroundColor: '#F3F3EE', borderRadius: '16px', margin: '0 12px 0 12px' }}>
+      <div className="flex-1 overflow-y-auto p-4 scrollbar-hide" style={{ backgroundColor: '#F3F3EE', borderRadius: '16px' }}>
         {loading ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-center">
@@ -532,8 +628,8 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="px-3 sm:px-4 pb-3 sm:pb-4" style={{ backgroundColor: '#FFFFFF', marginTop: '8px' }}>
-        <div className="relative flex items-center">
+      <div style={{ backgroundColor: '#FFFFFF', paddingTop: '8px' }}>
+        <div className="relative flex items-center" style={{ height: '40px' }}>
           <input
             type="text"
             placeholder="Type a message..."

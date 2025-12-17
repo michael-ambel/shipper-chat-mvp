@@ -52,7 +52,7 @@ export async function GET() {
         })
 
         if (!session) {
-          return { ...user, unreadCount: 0 }
+          return { ...user, unreadCount: 0, lastMessage: null, lastMessageTime: null, lastMessageSenderId: null, lastMessageIsRead: false, lastMessageDeliveredAt: null }
         }
 
         const unreadCount = await prisma.message.count({
@@ -63,7 +63,32 @@ export async function GET() {
           },
         })
 
-        return { ...user, unreadCount }
+        // Get the latest message
+        const latestMessage = await prisma.message.findFirst({
+          where: {
+            sessionId: session.id,
+          },
+          orderBy: {
+            createdAt: 'desc',
+          },
+          select: {
+            content: true,
+            createdAt: true,
+            senderId: true,
+            isRead: true,
+            deliveredAt: true,
+          },
+        })
+
+        return { 
+          ...user, 
+          unreadCount,
+          lastMessage: latestMessage?.content || null,
+          lastMessageTime: latestMessage?.createdAt || null,
+          lastMessageSenderId: latestMessage?.senderId || null,
+          lastMessageIsRead: latestMessage?.isRead || false,
+          lastMessageDeliveredAt: latestMessage?.deliveredAt || null,
+        }
       })
     )
 
