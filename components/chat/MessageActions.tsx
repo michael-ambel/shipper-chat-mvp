@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { Smile, Pencil, Trash2, MoreHorizontal } from 'lucide-react'
+import { Smile, Pencil, Trash2, MoreHorizontal, Reply, Forward } from 'lucide-react'
 import EmojiPicker from './EmojiPicker'
 
 interface MessageActionsProps {
@@ -10,6 +10,8 @@ interface MessageActionsProps {
   onEdit: () => void
   onDelete: () => void
   onReact: (emoji: string) => void
+  onReply: () => void
+  onForward: () => void
   show: boolean
 }
 
@@ -19,6 +21,8 @@ export default function MessageActions({
   onEdit,
   onDelete,
   onReact,
+  onReply,
+  onForward,
   show,
 }: MessageActionsProps) {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
@@ -52,6 +56,24 @@ export default function MessageActions({
       }`}
       style={{ top: '50%', transform: 'translateY(-50%)' }}
     >
+      {/* Reply button */}
+      <button
+        onClick={onReply}
+        className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-gray-200 transition-colors"
+        title="Reply"
+      >
+        <Reply size={16} color="#6B7280" />
+      </button>
+
+      {/* Forward button */}
+      <button
+        onClick={onForward}
+        className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-gray-200 transition-colors"
+        title="Forward"
+      >
+        <Forward size={16} color="#6B7280" />
+      </button>
+
       {/* React button */}
       <div className="relative">
         <button

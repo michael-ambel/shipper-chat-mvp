@@ -66,6 +66,16 @@ model Message {
   deletedAt   DateTime?
   createdAt   DateTime  @default(now())
 
+  replyToId        String?   @db.Uuid
+  replyTo          Message?  @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies          Message[] @relation("MessageReplies")
+
+  isForwarded      Boolean   @default(false)
+  forwardedFromId  String?   @db.Uuid
+  forwardedFrom    Message?  @relation("MessageForwards", fields: [forwardedFromId], references: [id], onDelete: SetNull)
+  forwards         Message[] @relation("MessageForwards")
+  originalSenderId String?   @db.Uuid
+
   session   ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   sender    User        @relation(fields: [senderId], references: [id])
   reactions Reaction[]
@@ -73,6 +83,8 @@ model Message {
   @@index([sessionId])
   @@index([senderId])
   @@index([createdAt])
+  @@index([replyToId])
+  @@index([forwardedFromId])
 }
 
 model Reaction {

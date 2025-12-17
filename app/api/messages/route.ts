@@ -37,6 +37,24 @@ export async function GET(request: NextRequest) {
         isEdited: true,
         editedAt: true,
         isDeleted: true,
+        replyToId: true,
+        replyTo: {
+          select: {
+            id: true,
+            content: true,
+            senderId: true,
+            isDeleted: true,
+            sender: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+        isForwarded: true,
+        forwardedFromId: true,
+        originalSenderId: true,
         sender: {
           select: {
             id: true,
@@ -82,7 +100,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { sessionId, content } = await request.json()
+    const { sessionId, content, replyToId } = await request.json()
 
     if (!sessionId || !content) {
       return NextResponse.json(
@@ -97,6 +115,7 @@ export async function POST(request: NextRequest) {
         senderId: currentUser.userId,
         content,
         type: 'text',
+        ...(replyToId && { replyToId }),
       },
       select: {
         id: true,
@@ -107,6 +126,21 @@ export async function POST(request: NextRequest) {
         isRead: true,
         readAt: true,
         type: true,
+        replyToId: true,
+        replyTo: {
+          select: {
+            id: true,
+            content: true,
+            senderId: true,
+            isDeleted: true,
+            sender: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
         sender: {
           select: {
             id: true,
@@ -131,5 +165,3 @@ export async function POST(request: NextRequest) {
     )
   }
 }
-
-

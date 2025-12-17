@@ -71,7 +71,7 @@ app.prepare().then(() => {
     })
 
     socket.on('send_message', async (data) => {
-      const { recipientId, message, messageId } = data
+      const { recipientId, message, messageId, replyTo, replyToId } = data
       const recipientSocketId = onlineUsers.get(recipientId)
       const now = new Date()
 
@@ -91,6 +91,8 @@ app.prepare().then(() => {
           message,
           messageId,
           timestamp: now.toISOString(),
+          replyTo,
+          replyToId,
         })
 
         // Notify recipient to refresh unread counts
@@ -238,6 +240,29 @@ app.prepare().then(() => {
           userId,
           sessionId,
         })
+      }
+    })
+
+    // Forward message - broadcast to each recipient
+    socket.on('forward_message', async (data) => {
+      const { forwardedMessages } = data
+
+      if (!forwardedMessages || !Array.isArray(forwardedMessages)) return
+
+      for (const msg of forwardedMessages) {
+        const recipientSocketId = onlineUsers.get(msg.targetUserId)
+
+        if (recipientSocketId) {
+          io.to(recipientSocketId).emit('receive_message', {
+            senderId: userId,
+            message: msg,
+            messageId: msg.id,
+            timestamp: msg.createdAt,
+            isForwarded: true,
+          })
+
+          io.to(recipientSocketId).emit('unread_count_changed')
+        }
       }
     })
 

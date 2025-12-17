@@ -2,18 +2,31 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { Socket } from 'socket.io-client'
-import { ChevronLeft, MessageCircleMore, Send, Search, Phone, Video, MoreHorizontal, BotMessageSquare, X, Check } from 'lucide-react'
+import { ChevronLeft, MessageCircleMore, Send, Search, Phone, Video, MoreHorizontal, BotMessageSquare, X, Check, Forward } from 'lucide-react'
 import { toast } from 'sonner'
 import { MessageStatus } from './MessageStatus'
 import MessageActions from './MessageActions'
 import MessageReactions from './MessageReactions'
 import ConfirmModal from '../ui/ConfirmModal'
+import ReplyPreview from './ReplyPreview'
+import ForwardModal from './ForwardModal'
 
 interface Reaction {
   id: string
   emoji: string
   userId: string
   user: {
+    id: string
+    name: string
+  }
+}
+
+interface ReplyTo {
+  id: string
+  content: string
+  senderId: string
+  isDeleted?: boolean
+  sender: {
     id: string
     name: string
   }
@@ -31,6 +44,11 @@ interface Message {
   editedAt?: string | null
   isDeleted?: boolean
   reactions?: Reaction[]
+  replyToId?: string | null
+  replyTo?: ReplyTo | null
+  isForwarded?: boolean
+  forwardedFromId?: string | null
+  originalSenderId?: string | null
   sender: {
     id: string
     name: string
@@ -67,6 +85,10 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
   const [messageToDelete, setMessageToDelete] = useState<string | null>(null)
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null)
   const [openedFromSearch, setOpenedFromSearch] = useState(false)
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null)
+  const [forwardModalOpen, setForwardModalOpen] = useState(false)
+  const [forwardingMessage, setForwardingMessage] = useState<Message | null>(null)
+  const [isForwarding, setIsForwarding] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messageRefs = useRef<{ [key: string]: HTMLDivElement | null }>({})
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -207,6 +229,9 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
             deliveredAt: data.timestamp,
             isRead: false,
             readAt: null,
+            replyToId: data.replyToId || null,
+            replyTo: data.replyTo || null,
+            isForwarded: data.isForwarded || false,
             sender: {
               id: data.senderId,
               name: selectedUserName || 'User',
@@ -427,6 +452,7 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
         body: JSON.stringify({
           sessionId,
           content: messageContent,
+          ...(replyingTo && { replyToId: replyingTo.id }),
         }),
       })
 
@@ -434,11 +460,14 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
       if (response.ok) {
         setMessages((prev) => [...prev, data.message])
         setOpenedFromSearch(false)
+        setReplyingTo(null)
 
         socket.emit('send_message', {
           recipientId: selectedUserId,
           message: messageContent,
           messageId: data.message.id,
+          replyTo: data.message.replyTo || null,
+          replyToId: data.message.replyToId || null,
         })
         
         setTimeout(() => scrollToBottom(), 100)
@@ -566,6 +595,57 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
     } finally {
       setDeleteModalOpen(false)
       setMessageToDelete(null)
+    }
+  }
+
+  const handleReply = (message: Message) => {
+    setReplyingTo(message)
+  }
+
+  const handleForward = (message: Message) => {
+    setForwardingMessage(message)
+    setForwardModalOpen(true)
+  }
+
+  const handleForwardSubmit = async (targetUserIds: string[]) => {
+    if (!forwardingMessage) return
+
+    setIsForwarding(true)
+    try {
+      const response = await fetch('/api/messages/forward', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messageId: forwardingMessage.id,
+          targetUserIds,
+        }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        toast.success(`Message forwarded to ${targetUserIds.length} user${targetUserIds.length > 1 ? 's' : ''}`)
+
+        if (socket) {
+          socket.emit('forward_message', {
+            forwardedMessages: data.messages,
+          })
+        }
+      } else {
+        toast.error('Failed to forward message')
+      }
+    } catch (error) {
+      toast.error('Failed to forward message')
+    } finally {
+      setIsForwarding(false)
+      setForwardModalOpen(false)
+      setForwardingMessage(null)
+    }
+  }
+
+  const scrollToMessage = (messageId: string) => {
+    const messageEl = messageRefs.current[messageId]
+    if (messageEl) {
+      messageEl.scrollIntoView({ behavior: 'smooth', block: 'center' })
     }
   }
 
@@ -951,9 +1031,39 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
                               This message was deleted
                             </p>
                           ) : (
-                            <p className="wrap-break-word" style={{ fontSize: '12px', color: '#111625', lineHeight: '16px' }}>
-                              {message.content}
-                            </p>
+                            <div style={{ width: '100%' }}>
+                              {message.isForwarded && (
+                                <div className="flex items-center" style={{ gap: '4px', marginBottom: '4px', opacity: 0.7 }}>
+                                  <Forward size={12} style={{ color: '#6B7280' }} />
+                                  <span style={{ fontSize: '11px', color: '#6B7280', fontStyle: 'italic' }}>
+                                    Forwarded
+                                  </span>
+                                </div>
+                              )}
+                              {message.replyTo && (
+                                <div
+                                  onClick={() => scrollToMessage(message.replyTo!.id)}
+                                  className="cursor-pointer hover:opacity-80 transition-opacity"
+                                  style={{
+                                    padding: '6px 8px',
+                                    marginBottom: '6px',
+                                    backgroundColor: isOwn ? 'rgba(0,0,0,0.05)' : 'rgba(0,0,0,0.03)',
+                                    borderLeft: '2px solid #1E9A80',
+                                    borderRadius: '0 4px 4px 0',
+                                  }}
+                                >
+                                  <div style={{ fontSize: '11px', fontWeight: 600, color: '#1E9A80', marginBottom: '2px' }}>
+                                    {message.replyTo.senderId === currentUserId ? 'You' : message.replyTo.sender.name}
+                                  </div>
+                                  <div style={{ fontSize: '11px', color: '#6B7280', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '200px' }}>
+                                    {message.replyTo.isDeleted ? 'This message was deleted' : message.replyTo.content}
+                                  </div>
+                                </div>
+                              )}
+                              <p className="wrap-break-word" style={{ fontSize: '12px', color: '#111625', lineHeight: '16px' }}>
+                                {message.content}
+                              </p>
+                            </div>
                           )}
                           {!message.isDeleted && groupedReactions.length > 0 && (
                             <MessageReactions
@@ -972,6 +1082,8 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
                             onEdit={() => handleStartEdit(message)}
                             onDelete={() => handleDeleteMessage(message.id)}
                             onReact={(emoji) => handleAddReaction(message.id, emoji)}
+                            onReply={() => handleReply(message)}
+                            onForward={() => handleForward(message)}
                             show={hoveredMessageId === message.id}
                           />
                         )}
@@ -1023,10 +1135,27 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
       </div>
 
       <div style={{ backgroundColor: '#FFFFFF', paddingTop: '8px' }}>
+        {replyingTo && !isAI && (
+          <div style={{ marginBottom: '8px' }}>
+            <ReplyPreview
+              replyTo={{
+                id: replyingTo.id,
+                content: replyingTo.content,
+                senderId: replyingTo.senderId,
+                sender: {
+                  id: replyingTo.sender.id,
+                  name: replyingTo.sender.name,
+                },
+              }}
+              currentUserId={currentUserId || ''}
+              onCancel={() => setReplyingTo(null)}
+            />
+          </div>
+        )}
         <div className="relative flex items-center" style={{ height: '40px' }}>
           <input
             type="text"
-            placeholder="Type a message..."
+            placeholder={replyingTo ? 'Type your reply...' : 'Type a message...'}
             value={inputValue}
             onChange={handleInputChange}
             onKeyPress={handleKeyPress}
@@ -1072,6 +1201,18 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
           setMessageToDelete(null)
         }}
         variant="danger"
+      />
+
+      <ForwardModal
+        isOpen={forwardModalOpen}
+        onClose={() => {
+          setForwardModalOpen(false)
+          setForwardingMessage(null)
+        }}
+        onForward={handleForwardSubmit}
+        messageContent={forwardingMessage?.content || ''}
+        currentUserId={currentUserId || ''}
+        isLoading={isForwarding}
       />
     </div>
   )
