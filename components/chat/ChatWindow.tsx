@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { Socket } from 'socket.io-client'
-import { ChevronLeft, MessageCircleMore, Send, Search, Phone, Video, MoreVertical, BotMessageSquare, X, Check } from 'lucide-react'
+import { ChevronLeft, MessageCircleMore, Send, Search, Phone, Video, MoreHorizontal, BotMessageSquare, X, Check } from 'lucide-react'
+import { toast } from 'sonner'
 import { MessageStatus } from './MessageStatus'
 import MessageActions from './MessageActions'
 import MessageReactions from './MessageReactions'
@@ -48,9 +49,11 @@ interface ChatWindowProps {
   onUnreadChange?: () => void
   isAI?: boolean
   onlineUsers?: string[]
+  targetMessageId?: string | null
+  onTargetMessageScrolled?: () => void
 }
 
-export default function ChatWindow({ selectedUserId, selectedUserName, currentUserId, socket, onBack, isMobile, onUnreadChange, isAI, onlineUsers = [] }: ChatWindowProps) {
+export default function ChatWindow({ selectedUserId, selectedUserName, currentUserId, socket, onBack, isMobile, onUnreadChange, isAI, onlineUsers = [], targetMessageId, onTargetMessageScrolled }: ChatWindowProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [inputValue, setInputValue] = useState('')
   const [sessionId, setSessionId] = useState<string | null>(null)
@@ -62,7 +65,10 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
   const [editContent, setEditContent] = useState('')
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [messageToDelete, setMessageToDelete] = useState<string | null>(null)
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null)
+  const [openedFromSearch, setOpenedFromSearch] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messageRefs = useRef<{ [key: string]: HTMLDivElement | null }>({})
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const isTypingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const editInputRef = useRef<HTMLInputElement>(null)
@@ -75,7 +81,6 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
       setSessionId(null)
     }
 
-    // Cleanup typing timeouts when switching users
     return () => {
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current)
@@ -84,10 +89,11 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
         clearTimeout(isTypingTimeoutRef.current)
       }
       setIsTyping(false)
+      setHighlightedMessageId(null)
+      setOpenedFromSearch(false)
     }
   }, [selectedUserId])
 
-  // Global socket listeners for message status updates
   useEffect(() => {
     if (!socket) return
 
@@ -142,7 +148,6 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
             user: data.reaction?.user || { id: data.userId, name: 'User' },
           }
           
-          // For 1-1 chats (replaced=true): remove any existing reaction from this user first
           let existingReactions = m.reactions || []
           if (data.replaced) {
             existingReactions = existingReactions.filter(
@@ -190,7 +195,6 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
     }
   }, [socket])
 
-  // Session-specific socket listeners
   useEffect(() => {
     if (socket && sessionId) {
       const handleReceiveMessage = (data: any) => {
@@ -213,7 +217,6 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
           setMessages((prev) => [...prev, newMessage])
           scrollToBottom()
 
-          // Mark as read immediately since chat is open
           if (data.messageId) {
             markMessageAsRead(data.messageId)
           }
@@ -226,7 +229,6 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
         if (data.userId === selectedUserId) {
           setIsTyping(true)
           
-          // Auto-clear typing indicator after 3 seconds
           if (isTypingTimeoutRef.current) {
             clearTimeout(isTypingTimeoutRef.current)
           }
@@ -260,8 +262,38 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
   }, [socket, sessionId, selectedUserId, selectedUserName])
 
   useEffect(() => {
-    scrollToBottom()
+    if (targetMessageId) {
+      setOpenedFromSearch(true)
+    }
+  }, [targetMessageId])
+
+  useEffect(() => {
+    if (!openedFromSearch && !targetMessageId) {
+      scrollToBottom()
+    }
   }, [messages])
+
+  useEffect(() => {
+    if (targetMessageId && messages.length > 0 && !loading && openedFromSearch) {
+      const timer = setTimeout(() => {
+        const targetElement = messageRefs.current[targetMessageId]
+        if (targetElement) {
+          targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          setHighlightedMessageId(targetMessageId)
+          
+          setTimeout(() => {
+            setHighlightedMessageId(null)
+            onTargetMessageScrolled?.()
+          }, 2000)
+        } else {
+          onTargetMessageScrolled?.()
+          setOpenedFromSearch(false)
+        }
+      }, 200)
+      
+      return () => clearTimeout(timer)
+    }
+  }, [targetMessageId, messages, loading, openedFromSearch, onTargetMessageScrolled])
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -287,18 +319,15 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
         if (messagesResponse.ok) {
           setMessages(messagesData.messages)
 
-          // Mark incoming messages as read
           const unread = messagesData.messages.filter(
             (m: Message) =>
               m.senderId !== currentUserId && !m.isRead
           )
 
           if (unread.length > 0) {
-            // Mark all unread messages as read (skip individual refreshes)
             Promise.all(
               unread.map((m: Message) => markMessageAsRead(m.id, true))
             ).then(() => {
-              // Refresh user list once after all messages are marked as read
               if (onUnreadChange) {
                 setTimeout(onUnreadChange, 300)
               }
@@ -318,10 +347,8 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
     const messageContent = inputValue.trim()
     setInputValue('')
 
-    // Handle AI chat
     if (isAI) {
       try {
-        // Add user message to UI
         const userMessage: Message = {
           id: Date.now().toString(),
           content: messageContent,
@@ -337,7 +364,6 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
         setMessages((prev) => [...prev, userMessage])
         setAiStreaming(true)
 
-        // Stream AI response
         const response = await fetch('/api/ai/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -352,7 +378,6 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
           return
         }
 
-        // Create AI message placeholder
         const aiMessageId = `ai-${Date.now()}`
         const aiMessage: Message = {
           id: aiMessageId,
@@ -368,7 +393,6 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
         }
         setMessages((prev) => [...prev, aiMessage])
 
-        // Stream the response
         const reader = response.body.getReader()
         const decoder = new TextDecoder()
 
@@ -394,7 +418,6 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
       return
     }
 
-    // Handle regular user chat
     if (!socket) return
 
     try {
@@ -410,12 +433,15 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
       const data = await response.json()
       if (response.ok) {
         setMessages((prev) => [...prev, data.message])
+        setOpenedFromSearch(false)
 
         socket.emit('send_message', {
           recipientId: selectedUserId,
           message: messageContent,
           messageId: data.message.id,
         })
+        
+        setTimeout(() => scrollToBottom(), 100)
       }
     } catch (error) {
     }
@@ -424,15 +450,12 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
   const handleTyping = useCallback(() => {
     if (!socket || !selectedUserId) return
 
-    // Emit typing event
     socket.emit('typing', { recipientId: selectedUserId })
 
-    // Clear existing timeout
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current)
     }
 
-    // Set timeout to emit stop_typing after 1500ms of inactivity
     typingTimeoutRef.current = setTimeout(() => {
       socket.emit('stop_typing', { recipientId: selectedUserId })
     }, 1500)
@@ -458,7 +481,6 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
         socket.emit('message_read', { messageId })
       }
 
-      // Refresh unread counts after marking as read (unless batching)
       if (!skipRefresh && onUnreadChange) {
         setTimeout(() => onUnreadChange(), 200)
       }
@@ -497,7 +519,6 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
           )
         )
 
-        // Broadcast to recipient
         if (socket && selectedUserId) {
           socket.emit('edit_message', {
             messageId: editingMessageId,
@@ -533,7 +554,6 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
           )
         )
 
-        // Broadcast to recipient
         if (socket && selectedUserId) {
           socket.emit('delete_message', {
             messageId: messageToDelete,
@@ -570,7 +590,6 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
           prev.map((m) => {
             if (m.id !== messageId) return m
             
-            // For 1-1 chats (replaced=true): remove any existing reaction from this user first
             let existingReactions = m.reactions || []
             if (data.replaced) {
               existingReactions = existingReactions.filter(
@@ -578,7 +597,6 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
               )
             }
             
-            // Check if same emoji already exists (shouldn't happen but safety check)
             const alreadyExists = existingReactions.some(
               (r) => r.userId === currentUserId && r.emoji === emoji
             )
@@ -588,7 +606,6 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
           })
         )
 
-        // Broadcast to recipient
         if (socket && selectedUserId) {
           socket.emit('add_reaction', {
             messageId,
@@ -623,7 +640,6 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
           })
         )
 
-        // Broadcast to recipient
         if (socket && selectedUserId) {
           socket.emit('remove_reaction', {
             messageId,
@@ -676,7 +692,6 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
       e.preventDefault()
       handleSend()
       
-      // Stop typing indicator when sending
       if (socket && selectedUserId) {
         socket.emit('stop_typing', { recipientId: selectedUserId })
         if (typingTimeoutRef.current) {
@@ -715,7 +730,6 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden" style={{ backgroundColor: '#FFFFFF', borderRadius: '24px', padding: '12px' }}>
-      {/* Header */}
       <div 
         className="flex items-center justify-between"
         style={{ 
@@ -728,7 +742,6 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
           gap: '12px',
         }}
       >
-        {/* Left - User Info */}
         <div className="flex items-center" style={{ gap: '12px' }}>
           {isMobile && (
             <button
@@ -745,17 +758,18 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
               <ChevronLeft style={{ width: '16px', height: '16px', color: '#28303F' }} />
             </button>
           )}
-          {/* User Avatar */}
           {isAI ? (
             <div 
-              className="rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-white flex items-center justify-center"
+              className="rounded-full flex items-center justify-center"
               style={{ 
                 width: '40px', 
                 height: '40px', 
                 flexShrink: 0,
+                border: '2px solid #1E9A80',
+                backgroundColor: 'transparent',
               }}
             >
-              <BotMessageSquare className="w-5 h-5" />
+              <BotMessageSquare className="w-6 h-6" style={{ color: '#1E9A80' }} />
             </div>
           ) : (
             <div 
@@ -771,7 +785,6 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
               {selectedUserName?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
             </div>
           )}
-          {/* Name and Status */}
           <div className="flex flex-col" style={{ gap: '2px' }}>
             <h2 style={{ fontSize: '14px', fontWeight: 500, color: '#111625', lineHeight: '20px', letterSpacing: '-0.006em' }}>
               {selectedUserName}
@@ -782,7 +795,6 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
           </div>
         </div>
 
-        {/* Right - Action Buttons */}
         <div className="flex items-center" style={{ height: '32px', gap: '12px' }}>
           <button
             className="flex items-center justify-center transition-opacity hover:opacity-70"
@@ -794,6 +806,7 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
               backgroundColor: '#FFFFFF',
               gap: '4px',
             }}
+            onClick={() => toast.info('Coming soon')}
           >
             <Search size={16} color="#262626" />
           </button>
@@ -807,6 +820,7 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
               backgroundColor: '#FFFFFF',
               gap: '4px',
             }}
+            onClick={() => toast.info('Coming soon')}
           >
             <Phone size={16} color="#262626" />
           </button>
@@ -820,6 +834,7 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
               backgroundColor: '#FFFFFF',
               gap: '4px',
             }}
+            onClick={() => toast.info('Coming soon')}
           >
             <Video size={16} color="#262626" />
           </button>
@@ -833,8 +848,9 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
               backgroundColor: '#FFFFFF',
               gap: '4px',
             }}
+            onClick={() => toast.info('Coming soon')}
           >
-            <MoreVertical size={16} color="#262626" />
+            <MoreHorizontal size={16} color="#262626" />
           </button>
         </div>
       </div>
@@ -864,12 +880,16 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
               const isConsecutive = prevMessage && prevMessage.senderId === message.senderId
               const isEditing = editingMessageId === message.id
               const groupedReactions = getGroupedReactions(message.reactions)
+              const isHighlighted = highlightedMessageId === message.id
               
               return (
                 <div
                   key={message.id}
+                  ref={(el) => { messageRefs.current[message.id] = el }}
                   className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'}`}
-                  style={{ marginBottom: isConsecutive ? '4px' : '12px' }}
+                  style={{ 
+                    marginBottom: isConsecutive ? '4px' : '12px',
+                  }}
                   onMouseEnter={() => setHoveredMessageId(message.id)}
                   onMouseLeave={() => setHoveredMessageId(null)}
                 >
@@ -911,16 +931,19 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
                     ) : (
                       <>
                         <div
-                          className="relative max-w-[75%] sm:max-w-xs lg:max-w-md"
+                          className="relative max-w-[75%] sm:max-w-xs lg:max-w-md transition-all duration-500"
                           style={{
                             minHeight: '40px',
                             display: 'flex',
                             alignItems: 'center',
-                            backgroundColor: message.isDeleted ? '#F3F4F6' : isOwn ? '#F0FDF4' : '#FFFFFF',
+                            backgroundColor: isHighlighted 
+                              ? (isOwn ? '#FFFFFF' : '#F0FBF2') 
+                              : (message.isDeleted ? '#F3F4F6' : isOwn ? '#F0FDF4' : '#FFFFFF'),
                             borderRadius: '8px',
-                            padding: '8px 12px',
+                            padding: isHighlighted ? '12px 16px' : '8px 12px',
                             opacity: message.isDeleted ? 0.7 : 1,
                             marginBottom: groupedReactions.length > 0 ? '8px' : 0,
+                            boxShadow: isHighlighted ? '0 0 0 3px ' + (isOwn ? '#E5E7EB' : '#BBF7D0') : 'none',
                           }}
                         >
                           {message.isDeleted ? (
@@ -932,7 +955,6 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
                               {message.content}
                             </p>
                           )}
-                          {/* Reactions - positioned at bottom corner of message */}
                           {!message.isDeleted && groupedReactions.length > 0 && (
                             <MessageReactions
                               reactions={groupedReactions}
@@ -1038,7 +1060,6 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
         </div>
       </div>
 
-      {/* Delete Confirmation Modal */}
       <ConfirmModal
         isOpen={deleteModalOpen}
         title="Delete Message"
@@ -1055,4 +1076,3 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
     </div>
   )
 }
-

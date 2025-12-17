@@ -18,6 +18,7 @@ export default function ChatPage() {
   const [showChat, setShowChat] = useState(false)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
   const [showDropdown, setShowDropdown] = useState(false)
+  const [targetMessageId, setTargetMessageId] = useState<string | null>(null)
 
   const { socket, isConnected, onlineUsers } = useSocket(token)
 
@@ -86,10 +87,11 @@ export default function ChatPage() {
     setRefreshTrigger(prev => prev + 1)
   }
 
-  const handleSelectUser = (userId: string) => {
+  const handleSelectUser = (userId: string, messageId?: string) => {
     setSelectedUserId(userId)
     const user = users.find(u => u.id === userId)
     setSelectedUserName(user?.name || null)
+    setTargetMessageId(messageId || null)
     setShowChat(true)
   }
 
@@ -153,6 +155,7 @@ export default function ChatPage() {
             <div 
               className="flex items-center justify-center cursor-pointer hover:opacity-70 transition-opacity"
               style={{ width: '44px', height: '44px', borderRadius: '12px' }}
+              onClick={() => toast.info('Only Chat page is active')}
             >
               <House size={16} color="#151515" />
             </div>
@@ -171,18 +174,21 @@ export default function ChatPage() {
             <div 
               className="flex items-center justify-center cursor-pointer hover:opacity-70 transition-opacity"
               style={{ width: '44px', height: '44px', borderRadius: '12px' }}
+              onClick={() => toast.info('Only Chat page is active')}
             >
               <Compass size={16} color="#151515" />
             </div>
             <div 
               className="flex items-center justify-center cursor-pointer hover:opacity-70 transition-opacity"
               style={{ width: '44px', height: '44px', borderRadius: '12px' }}
+              onClick={() => toast.info('Only Chat page is active')}
             >
               <Folder size={16} color="#151515" />
             </div>
             <div 
               className="flex items-center justify-center cursor-pointer hover:opacity-70 transition-opacity"
               style={{ width: '44px', height: '44px', borderRadius: '12px' }}
+              onClick={() => toast.info('Only Chat page is active')}
             >
               <Images size={16} color="#151515" />
             </div>
@@ -194,6 +200,7 @@ export default function ChatPage() {
           <div 
             className="flex items-center justify-center cursor-pointer hover:opacity-70 transition-opacity"
             style={{ width: '44px', height: '44px', borderRadius: '12px' }}
+            onClick={() => toast.info('Only Chat page is active')}
           >
             <Sparkle size={16} color="#151515" />
           </div>
@@ -228,7 +235,7 @@ export default function ChatPage() {
         >
           {/* Left - Message icon and text */}
           <div className="flex items-center" style={{ height: '20px', gap: '8px' }}>
-            <MessageCircle size={20} color="#151515" />
+            <MessageCircle size={18} color="#151515" />
             <span style={{ fontSize: '14px', fontWeight: 500, color: '#151515', lineHeight: '20px' }}>Message</span>
           </div>
 
@@ -261,9 +268,14 @@ export default function ChatPage() {
                   color: '#404040',
                   backgroundColor: 'transparent',
                 }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    toast.info('Coming soon')
+                  }
+                }}
               />
               <div 
-                className="flex items-center justify-center"
+                className="flex items-center justify-center cursor-pointer hover:opacity-70 transition-opacity"
                 style={{
                   height: '24px',
                   paddingTop: '5px',
@@ -274,6 +286,7 @@ export default function ChatPage() {
                   borderRadius: '6px',
                   backgroundColor: '#F3F3EE',
                 }}
+                onClick={() => toast.info('Coming soon')}
               >
                 <Command size={12} color="#404040" />
                 <span style={{ fontSize: '12px', fontWeight: 500, color: '#404040' }}>+</span>
@@ -291,6 +304,7 @@ export default function ChatPage() {
                 border: '1px solid #E8E5DF',
                 backgroundColor: '#FFFFFF',
               }}
+              onClick={() => toast.info('Coming soon')}
             >
               <Bell size={16} color="#262626" />
             </button>
@@ -304,6 +318,7 @@ export default function ChatPage() {
                 border: '1px solid #E8E5DF',
                 backgroundColor: '#FFFFFF',
               }}
+              onClick={() => toast.info('Coming soon')}
             >
               <Settings size={16} color="#262626" />
             </button>
@@ -404,6 +419,8 @@ export default function ChatPage() {
               onUnreadChange={handleUnreadChange}
               isAI={selectedUser?.isAI}
               onlineUsers={onlineUsers}
+              targetMessageId={targetMessageId}
+              onTargetMessageScrolled={() => setTargetMessageId(null)}
             />
           </div>
         </div>

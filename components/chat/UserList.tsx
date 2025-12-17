@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { BotMessageSquare, PencilLine, Search, Filter, MessageCircle, Check, CheckCheck } from 'lucide-react'
+import { useEffect, useState, useCallback } from 'react'
+import { BotMessageSquare, PencilLine, Search, Filter, MessageCircle, Check, CheckCheck, X } from 'lucide-react'
+import { toast } from 'sonner'
 
 interface User {
   id: string
@@ -18,9 +19,24 @@ interface User {
   lastMessageDeliveredAt?: string | null
 }
 
+interface SearchResult {
+  id: string
+  content: string
+  createdAt: string
+  senderId: string
+  senderName: string
+  sessionId: string
+  chatPartner: {
+    id: string
+    name: string
+    avatar: string | null
+    isAI: boolean
+  } | null
+}
+
 interface UserListProps {
   onlineUsers: string[]
-  onSelectUser: (userId: string) => void
+  onSelectUser: (userId: string, messageId?: string) => void
   selectedUserId: string | null
   currentUserId?: string | null
   refreshTrigger?: number
@@ -29,6 +45,10 @@ interface UserListProps {
 export default function UserList({ onlineUsers, onSelectUser, selectedUserId, currentUserId, refreshTrigger }: UserListProps) {
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([])
+  const [isSearching, setIsSearching] = useState(false)
+  const [searchDebounceTimer, setSearchDebounceTimer] = useState<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
     fetchUsers()
@@ -39,6 +59,55 @@ export default function UserList({ onlineUsers, onSelectUser, selectedUserId, cu
       fetchUsers()
     }
   }, [refreshTrigger])
+
+  // Debounced search
+  const handleSearch = useCallback((query: string) => {
+    setSearchQuery(query)
+
+    if (searchDebounceTimer) {
+      clearTimeout(searchDebounceTimer)
+    }
+
+    if (!query.trim() || query.trim().length < 2) {
+      setSearchResults([])
+      setIsSearching(false)
+      return
+    }
+
+    setIsSearching(true)
+
+    const timer = setTimeout(async () => {
+      try {
+        const response = await fetch(`/api/messages/search?q=${encodeURIComponent(query.trim())}`)
+        const data = await response.json()
+        if (response.ok) {
+          setSearchResults(data.results)
+        }
+      } catch (error) {
+        setSearchResults([])
+      } finally {
+        setIsSearching(false)
+      }
+    }, 300)
+
+    setSearchDebounceTimer(timer)
+  }, [searchDebounceTimer])
+
+  const clearSearch = () => {
+    setSearchQuery('')
+    setSearchResults([])
+    setIsSearching(false)
+    if (searchDebounceTimer) {
+      clearTimeout(searchDebounceTimer)
+    }
+  }
+
+  const handleSearchResultClick = (result: SearchResult) => {
+    if (result.chatPartner) {
+      onSelectUser(result.chatPartner.id, result.id)
+      clearSearch()
+    }
+  }
 
   const fetchUsers = async () => {
     try {
@@ -83,6 +152,21 @@ export default function UserList({ onlineUsers, onSelectUser, selectedUserId, cu
     if (diffHours < 24) return `${diffHours}h ago`
     if (diffDays < 7) return `${diffDays}d ago`
     return seen.toLocaleDateString()
+  }
+
+  const highlightMatch = (text: string, query: string) => {
+    if (!query.trim()) return text
+    
+    const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi')
+    const parts = text.split(regex)
+    
+    return parts.map((part, i) => 
+      regex.test(part) ? (
+        <span key={i} style={{ backgroundColor: '#FEF08A', fontWeight: 500 }}>{part}</span>
+      ) : (
+        part
+      )
+    )
   }
 
   if (loading) {
@@ -137,6 +221,7 @@ export default function UserList({ onlineUsers, onSelectUser, selectedUserId, cu
             gap: '6px',
             whiteSpace: 'nowrap',
           }}
+          onClick={() => toast.info('Only chat window messaging is functional')}
         >
           <PencilLine size={14} color="#FFFFFF" style={{ flexShrink: 0 }} />
           <span style={{ fontSize: '14px', fontWeight: 500, lineHeight: '20px', letterSpacing: '-0.6%', textAlign: 'center' }}>New Message</span>
@@ -154,18 +239,28 @@ export default function UserList({ onlineUsers, onSelectUser, selectedUserId, cu
           <input
             type="text"
             placeholder="Search in message"
+            value={searchQuery}
+            onChange={(e) => handleSearch(e.target.value)}
             className="w-full outline-none"
             style={{
               height: '40px',
               border: '1px solid #E8E5DF',
               borderRadius: '10px',
               paddingLeft: '36px',
-              paddingRight: '12px',
+              paddingRight: searchQuery ? '36px' : '12px',
               color: '#404040',
               fontSize: '14px',
               fontWeight: 400,
             }}
           />
+          {searchQuery && (
+            <button
+              onClick={clearSearch}
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 hover:opacity-70"
+            >
+              <X size={16} color="#8B8B8B" />
+            </button>
+          )}
         </div>
         <button
           className="flex items-center justify-center transition-colors hover:opacity-80"
@@ -181,9 +276,63 @@ export default function UserList({ onlineUsers, onSelectUser, selectedUserId, cu
         </button>
       </div>
 
-      {/* Users List */}
+      {/* Search Results or Users List */}
       <div className="flex-1 overflow-y-auto scrollbar-hide" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-start' }}>
-        {users.length === 0 ? (
+        {/* Search Results */}
+        {searchQuery.trim().length >= 2 ? (
+          isSearching ? (
+            <div className="flex-1 flex items-center justify-center">
+              <div className="animate-spin rounded-full h-5 w-5 border-2" style={{ borderColor: '#E8E5DF', borderTopColor: '#1E9A80' }}></div>
+            </div>
+          ) : searchResults.length === 0 ? (
+            <div className="p-4 text-center" style={{ fontWeight: 400, color: '#8B8B8B', fontSize: '12px', lineHeight: '16px' }}>
+              No messages found for "{searchQuery}"
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 500, color: '#8B8B8B', marginBottom: '8px' }}>
+                {searchResults.length} result{searchResults.length !== 1 ? 's' : ''} found
+              </div>
+              {searchResults.map((result) => (
+                <button
+                  key={result.id}
+                  onClick={() => handleSearchResultClick(result)}
+                  className="w-full text-left transition-all hover:bg-gray-50"
+                  style={{
+                    padding: '12px',
+                    borderRadius: '12px',
+                    backgroundColor: '#F9FAFB',
+                    border: '1px solid #E8E5DF',
+                  }}
+                >
+                  {/* Chat Partner Name */}
+                  <div className="flex items-center justify-between mb-1">
+                    <span style={{ fontSize: '12px', fontWeight: 500, color: '#111625' }}>
+                      {result.chatPartner?.name || 'Unknown'}
+                    </span>
+                    <span style={{ fontSize: '10px', color: '#8B8B8B' }}>
+                      {formatLastSeen(result.createdAt)}
+                    </span>
+                  </div>
+                  {/* Message Preview */}
+                  <p
+                    style={{
+                      fontSize: '12px',
+                      color: '#6B7280',
+                      lineHeight: '16px',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    <span style={{ color: '#8B8B8B' }}>{result.senderName}: </span>
+                    {highlightMatch(result.content, searchQuery)}
+                  </p>
+                </button>
+              ))}
+            </div>
+          )
+        ) : users.length === 0 ? (
           <div className="p-4 text-center" style={{ fontWeight: 400, color: '#8B8B8B', lineHeight: '150%', letterSpacing: '-0.01em' }}>
             No users found
           </div>
@@ -246,8 +395,8 @@ export default function UserList({ onlineUsers, onSelectUser, selectedUserId, cu
                   <div className="relative" style={{ width: '40px', height: '40px', flexShrink: 0 }}>
                     {user.isAI ? (
                       <>
-                        <div className="rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-white flex items-center justify-center" style={{ width: '40px', height: '40px' }}>
-                          <BotMessageSquare className="w-5 h-5" />
+                        <div className="rounded-full flex items-center justify-center" style={{ width: '40px', height: '40px', border: '2px solid #1E9A80', backgroundColor: 'transparent' }}>
+                          <BotMessageSquare className="w-6 h-6" style={{ color: '#1E9A80' }} />
                         </div>
                         <div className="absolute bottom-0 right-0 w-3 h-3 min-w-[12px] min-h-[12px] rounded-full border-2 border-white flex-shrink-0" style={{ backgroundColor: '#38C793' }} />
                       </>
@@ -294,7 +443,7 @@ export default function UserList({ onlineUsers, onSelectUser, selectedUserId, cu
                       {user.name}
                     </span>
                     <span style={{ fontSize: '12px', fontWeight: 400, color: '#8B8B8B', lineHeight: '16px', flexShrink: 0 }}>
-                      {formatLastSeen(user.lastSeen)}
+                      {user.isAI ? 'Online' : formatLastSeen(user.lastSeen)}
                     </span>
                   </div>
                   {/* Row 2: Last Message and Read Status */}
