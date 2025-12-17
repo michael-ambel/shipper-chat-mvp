@@ -14,11 +14,14 @@ export default function ChatPage() {
   const [currentUser, setCurrentUser] = useState<any>(null)
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
   const [selectedUserName, setSelectedUserName] = useState<string | null>(null)
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null)
+  const [selectedGroupName, setSelectedGroupName] = useState<string | null>(null)
   const [users, setUsers] = useState<any[]>([])
   const [showChat, setShowChat] = useState(false)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
   const [showDropdown, setShowDropdown] = useState(false)
   const [targetMessageId, setTargetMessageId] = useState<string | null>(null)
+  const [isGroupChat, setIsGroupChat] = useState(false)
 
   const { socket, isConnected, onlineUsers } = useSocket(token)
 
@@ -89,9 +92,38 @@ export default function ChatPage() {
 
   const handleSelectUser = (userId: string, messageId?: string) => {
     setSelectedUserId(userId)
+    setSelectedGroupId(null)
+    setIsGroupChat(false)
     const user = users.find(u => u.id === userId)
     setSelectedUserName(user?.name || null)
+    setSelectedGroupName(null)
     setTargetMessageId(messageId || null)
+    setShowChat(true)
+  }
+
+  const handleSelectGroup = async (groupId: string) => {
+    setSelectedGroupId(groupId)
+    setSelectedUserId(null)
+    setIsGroupChat(true)
+    setSelectedUserName(null)
+    setTargetMessageId(null)
+    
+    // Fetch group details
+    try {
+      const response = await fetch(`/api/groups/${groupId}`)
+      if (response.ok) {
+        const data = await response.json()
+        setSelectedGroupName(data.group.name)
+        
+        // Join the group socket room
+        if (socket) {
+          socket.emit('join_group', { sessionId: groupId })
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching group:', error)
+    }
+    
     setShowChat(true)
   }
 
@@ -403,15 +435,21 @@ export default function ChatPage() {
             <UserList
               onlineUsers={onlineUsers}
               onSelectUser={handleSelectUser}
+              onSelectGroup={handleSelectGroup}
               selectedUserId={selectedUserId}
+              selectedGroupId={selectedGroupId}
               currentUserId={currentUser?.id}
               refreshTrigger={refreshTrigger}
+              socket={socket}
             />
           </div>
           <div className={`${showChat ? 'flex' : 'hidden sm:flex'} flex-1`}>
             <ChatWindow
               selectedUserId={selectedUserId}
               selectedUserName={selectedUserName}
+              selectedGroupId={selectedGroupId}
+              selectedGroupName={selectedGroupName}
+              isGroupChat={isGroupChat}
               currentUserId={currentUser?.id || null}
               socket={socket}
               onBack={handleBackToUsers}

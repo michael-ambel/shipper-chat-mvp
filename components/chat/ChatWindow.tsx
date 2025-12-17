@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { Socket } from 'socket.io-client'
-import { ChevronLeft, MessageCircleMore, Send, Search, Phone, Video, MoreHorizontal, BotMessageSquare, X, Check, Forward } from 'lucide-react'
+import { ChevronLeft, MessageCircleMore, Send, Search, Phone, Video, MoreHorizontal, BotMessageSquare, X, Check, Forward, Users } from 'lucide-react'
 import { toast } from 'sonner'
 import { MessageStatus } from './MessageStatus'
 import MessageActions from './MessageActions'
@@ -60,6 +60,9 @@ interface Message {
 interface ChatWindowProps {
   selectedUserId: string | null
   selectedUserName: string | null
+  selectedGroupId?: string | null
+  selectedGroupName?: string | null
+  isGroupChat?: boolean
   currentUserId: string | null
   socket: Socket | null
   onBack: () => void
@@ -71,7 +74,7 @@ interface ChatWindowProps {
   onTargetMessageScrolled?: () => void
 }
 
-export default function ChatWindow({ selectedUserId, selectedUserName, currentUserId, socket, onBack, isMobile, onUnreadChange, isAI, onlineUsers = [], targetMessageId, onTargetMessageScrolled }: ChatWindowProps) {
+export default function ChatWindow({ selectedUserId, selectedUserName, selectedGroupId, selectedGroupName, isGroupChat = false, currentUserId, socket, onBack, isMobile, onUnreadChange, isAI, onlineUsers = [], targetMessageId, onTargetMessageScrolled }: ChatWindowProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [inputValue, setInputValue] = useState('')
   const [sessionId, setSessionId] = useState<string | null>(null)
@@ -96,7 +99,7 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
   const editInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    if (selectedUserId) {
+    if (selectedUserId || (isGroupChat && selectedGroupId)) {
       loadSession()
     } else {
       setMessages([])
@@ -114,7 +117,7 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
       setHighlightedMessageId(null)
       setOpenedFromSearch(false)
     }
-  }, [selectedUserId])
+  }, [selectedUserId, selectedGroupId, isGroupChat])
 
   useEffect(() => {
     if (!socket) return
@@ -275,16 +278,74 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
       socket.on('user_typing', handleUserTyping)
       socket.on('user_stop_typing', handleUserStopTyping)
 
+      // Group message handlers
+      const handleReceiveGroupMessage = (data: any) => {
+        if (data.sessionId === sessionId && data.senderId !== currentUserId) {
+          const newMessage: Message = {
+            id: data.messageId || Date.now().toString(),
+            content: data.message,
+            senderId: data.senderId,
+            createdAt: data.timestamp,
+            deliveredAt: data.timestamp,
+            isRead: false,
+            readAt: null,
+            replyToId: data.replyToId || null,
+            replyTo: data.replyTo || null,
+            sender: {
+              id: data.senderId,
+              name: data.senderName || 'User',
+              email: '',
+              avatar: null,
+            },
+          }
+          setMessages((prev) => [...prev, newMessage])
+          scrollToBottom()
+
+          if (data.messageId) {
+            markMessageAsRead(data.messageId)
+          }
+        }
+      }
+
+      const handleGroupUserTyping = (data: any) => {
+        if (data.sessionId === sessionId && data.userId !== currentUserId) {
+          setIsTyping(true)
+          
+          if (isTypingTimeoutRef.current) {
+            clearTimeout(isTypingTimeoutRef.current)
+          }
+          isTypingTimeoutRef.current = setTimeout(() => {
+            setIsTyping(false)
+          }, 3000)
+        }
+      }
+
+      const handleGroupUserStopTyping = (data: any) => {
+        if (data.sessionId === sessionId && data.userId !== currentUserId) {
+          setIsTyping(false)
+          if (isTypingTimeoutRef.current) {
+            clearTimeout(isTypingTimeoutRef.current)
+          }
+        }
+      }
+
+      socket.on('receive_group_message', handleReceiveGroupMessage)
+      socket.on('group_user_typing', handleGroupUserTyping)
+      socket.on('group_user_stop_typing', handleGroupUserStopTyping)
+
       return () => {
         socket.off('receive_message', handleReceiveMessage)
         socket.off('user_typing', handleUserTyping)
         socket.off('user_stop_typing', handleUserStopTyping)
+        socket.off('receive_group_message', handleReceiveGroupMessage)
+        socket.off('group_user_typing', handleGroupUserTyping)
+        socket.off('group_user_stop_typing', handleGroupUserStopTyping)
         if (isTypingTimeoutRef.current) {
           clearTimeout(isTypingTimeoutRef.current)
         }
       }
     }
-  }, [socket, sessionId, selectedUserId, selectedUserName])
+  }, [socket, sessionId, selectedUserId, selectedUserName, currentUserId])
 
   useEffect(() => {
     if (targetMessageId) {
@@ -327,18 +388,29 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
   const loadSession = async () => {
     try {
       setLoading(true)
-      const sessionResponse = await fetch('/api/sessions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ recipientId: selectedUserId }),
-      })
+      
+      let currentSessionId: string | null = null
 
-      const sessionData = await sessionResponse.json()
-      if (sessionResponse.ok) {
-        setSessionId(sessionData.session.id)
+      if (isGroupChat && selectedGroupId) {
+        currentSessionId = selectedGroupId
+        setSessionId(selectedGroupId)
+      } else if (selectedUserId) {
+        const sessionResponse = await fetch('/api/sessions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ recipientId: selectedUserId }),
+        })
 
+        const sessionData = await sessionResponse.json()
+        if (sessionResponse.ok) {
+          currentSessionId = sessionData.session.id
+          setSessionId(sessionData.session.id)
+        }
+      }
+
+      if (currentSessionId) {
         const messagesResponse = await fetch(
-          `/api/messages?sessionId=${sessionData.session.id}`
+          `/api/messages?sessionId=${currentSessionId}`
         )
         const messagesData = await messagesResponse.json()
         if (messagesResponse.ok) {
@@ -462,13 +534,24 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
         setOpenedFromSearch(false)
         setReplyingTo(null)
 
-        socket.emit('send_message', {
-          recipientId: selectedUserId,
-          message: messageContent,
-          messageId: data.message.id,
-          replyTo: data.message.replyTo || null,
-          replyToId: data.message.replyToId || null,
-        })
+        if (isGroupChat && selectedGroupId) {
+          socket.emit('send_group_message', {
+            sessionId: selectedGroupId,
+            message: messageContent,
+            messageId: data.message.id,
+            replyTo: data.message.replyTo || null,
+            replyToId: data.message.replyToId || null,
+            senderName: data.message.sender?.name || 'You',
+          })
+        } else {
+          socket.emit('send_message', {
+            recipientId: selectedUserId,
+            message: messageContent,
+            messageId: data.message.id,
+            replyTo: data.message.replyTo || null,
+            replyToId: data.message.replyToId || null,
+          })
+        }
         
         setTimeout(() => scrollToBottom(), 100)
       }
@@ -477,18 +560,30 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
   }
 
   const handleTyping = useCallback(() => {
-    if (!socket || !selectedUserId) return
+    if (!socket) return
 
-    socket.emit('typing', { recipientId: selectedUserId })
+    if (isGroupChat && selectedGroupId) {
+      socket.emit('group_typing', { sessionId: selectedGroupId })
+      
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current)
+      }
 
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current)
+      typingTimeoutRef.current = setTimeout(() => {
+        socket.emit('group_stop_typing', { sessionId: selectedGroupId })
+      }, 1500)
+    } else if (selectedUserId) {
+      socket.emit('typing', { recipientId: selectedUserId })
+
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current)
+      }
+
+      typingTimeoutRef.current = setTimeout(() => {
+        socket.emit('stop_typing', { recipientId: selectedUserId })
+      }, 1500)
     }
-
-    typingTimeoutRef.current = setTimeout(() => {
-      socket.emit('stop_typing', { recipientId: selectedUserId })
-    }, 1500)
-  }, [socket, selectedUserId])
+  }, [socket, selectedUserId, selectedGroupId, isGroupChat])
 
   const markMessageAsRead = async (messageId: string, skipRefresh = false) => {
     try {
@@ -790,7 +885,7 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
     })
   }
 
-  if (!selectedUserId) {
+  if (!selectedUserId && !selectedGroupId) {
     return (
       <div className="flex-1 flex items-center justify-center" style={{ backgroundColor: '#FFFFFF', borderRadius: '24px' }}>
         <div className="text-center">
@@ -799,7 +894,7 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
             Select a conversation
           </h3>
           <p style={{ fontSize: '12px', fontWeight: 400, color: '#8B8B8B', lineHeight: '16px' }}>
-            Choose a user from the list to start chatting
+            Choose a user or group from the list to start chatting
           </p>
         </div>
       </div>
@@ -838,7 +933,19 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
               <ChevronLeft style={{ width: '16px', height: '16px', color: '#28303F' }} />
             </button>
           )}
-          {isAI ? (
+          {isGroupChat ? (
+            <div 
+              className="rounded-full flex items-center justify-center"
+              style={{ 
+                width: '40px', 
+                height: '40px', 
+                flexShrink: 0,
+                backgroundColor: '#F0FDF4',
+              }}
+            >
+              <Users className="w-5 h-5" style={{ color: '#1E9A80' }} />
+            </div>
+          ) : isAI ? (
             <div 
               className="rounded-full flex items-center justify-center"
               style={{ 
@@ -867,10 +974,10 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
           )}
           <div className="flex flex-col" style={{ gap: '2px' }}>
             <h2 style={{ fontSize: '14px', fontWeight: 500, color: '#111625', lineHeight: '20px', letterSpacing: '-0.006em' }}>
-              {selectedUserName}
+              {isGroupChat ? selectedGroupName : selectedUserName}
             </h2>
-            <span style={{ fontSize: '12px', fontWeight: 400, color: isOnline ? '#38C793' : '#8B8B8B', lineHeight: '16px' }}>
-              {isOnline ? 'Online' : 'Offline'}
+            <span style={{ fontSize: '12px', fontWeight: 400, color: isGroupChat ? '#6B7280' : (isOnline ? '#38C793' : '#8B8B8B'), lineHeight: '16px' }}>
+              {isGroupChat ? 'Group' : (isOnline ? 'Online' : 'Offline')}
             </span>
           </div>
         </div>
@@ -962,6 +1069,8 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
               const groupedReactions = getGroupedReactions(message.reactions)
               const isHighlighted = highlightedMessageId === message.id
               
+              const showSenderName = isGroupChat && !isOwn && !isConsecutive
+              
               return (
                 <div
                   key={message.id}
@@ -973,6 +1082,11 @@ export default function ChatWindow({ selectedUserId, selectedUserName, currentUs
                   onMouseEnter={() => setHoveredMessageId(message.id)}
                   onMouseLeave={() => setHoveredMessageId(null)}
                 >
+                  {showSenderName && (
+                    <span style={{ fontSize: '11px', fontWeight: 500, color: '#1E9A80', marginBottom: '4px', marginLeft: '4px' }}>
+                      {message.sender.name}
+                    </span>
+                  )}
                   <div className="relative">
                     {isEditing ? (
                       <div

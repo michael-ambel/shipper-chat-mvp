@@ -59,10 +59,23 @@ app.prepare().then(() => {
     }
   })
 
-  io.on('connection', (socket) => {
+  io.on('connection', async (socket) => {
     const userId = socket.data.userId
 
     onlineUsers.set(userId, socket.id)
+
+    // Join user to all their group rooms
+    try {
+      const userGroups = await prisma.sessionParticipant.findMany({
+        where: { userId, isActive: true },
+        select: { sessionId: true },
+      })
+      for (const group of userGroups) {
+        socket.join(`group:${group.sessionId}`)
+      }
+    } catch (error) {
+      console.error('Error joining group rooms:', error)
+    }
     
     io.emit('user_status', {
       userId,
@@ -70,6 +83,23 @@ app.prepare().then(() => {
       onlineUsers: Array.from(onlineUsers.keys()),
     })
 
+    // Join a specific group room
+    socket.on('join_group', (data) => {
+      const { sessionId } = data
+      if (sessionId) {
+        socket.join(`group:${sessionId}`)
+      }
+    })
+
+    // Leave a group room
+    socket.on('leave_group', (data) => {
+      const { sessionId } = data
+      if (sessionId) {
+        socket.leave(`group:${sessionId}`)
+      }
+    })
+
+    // 1-1 message
     socket.on('send_message', async (data) => {
       const { recipientId, message, messageId, replyTo, replyToId } = data
       const recipientSocketId = onlineUsers.get(recipientId)
@@ -113,6 +143,123 @@ app.prepare().then(() => {
           deliveredAt: now.toISOString(),
         })
       }
+    })
+
+    // Group message
+    socket.on('send_group_message', async (data) => {
+      const { sessionId, message, messageId, replyTo, replyToId, senderName } = data
+      const now = new Date()
+
+      if (messageId) {
+        try {
+          await prisma.message.update({
+            where: { id: messageId },
+            data: { deliveredAt: now },
+          })
+        } catch (error) {
+        }
+      }
+
+      // Broadcast to all group members except sender
+      socket.to(`group:${sessionId}`).emit('receive_group_message', {
+        senderId: userId,
+        senderName,
+        sessionId,
+        message,
+        messageId,
+        timestamp: now.toISOString(),
+        replyTo,
+        replyToId,
+      })
+
+      // Notify group members to refresh unread counts
+      socket.to(`group:${sessionId}`).emit('unread_count_changed')
+
+      socket.emit('message_sent', {
+        sessionId,
+        message,
+        messageId,
+        timestamp: now.toISOString(),
+      })
+    })
+
+    // Group created - notify all members
+    socket.on('group_created', (data) => {
+      const { group, memberIds } = data
+      
+      // Notify ALL members about the new group (including creator)
+      for (const memberId of memberIds) {
+        const memberSocketId = onlineUsers.get(memberId)
+        
+        if (memberSocketId) {
+          // Tell member to refresh their groups list
+          io.to(memberSocketId).emit('group_created', { group })
+          
+          // Make them join the group room
+          const memberSocket = io.sockets.sockets.get(memberSocketId)
+          if (memberSocket) {
+            memberSocket.join(`group:${group.id}`)
+          }
+        }
+      }
+    })
+
+    // Group member added
+    socket.on('group_member_added', (data) => {
+      const { sessionId, member, memberId } = data
+      
+      // Make the new member join the room if online
+      const memberSocketId = onlineUsers.get(memberId)
+      
+      if (memberSocketId) {
+        const memberSocket = io.sockets.sockets.get(memberSocketId)
+        if (memberSocket) {
+          memberSocket.join(`group:${sessionId}`)
+          
+          // Notify the new member directly
+          memberSocket.emit('added_to_group', { sessionId })
+          
+          // Also emit group_member_added to the new member
+          memberSocket.emit('group_member_added', {
+            sessionId,
+            member,
+            memberId,
+          })
+        }
+      }
+      
+      // Notify ALL existing group members in the room
+      io.to(`group:${sessionId}`).emit('group_member_added', {
+        sessionId,
+        member,
+        memberId,
+      })
+    })
+
+    // Group member removed
+    socket.on('group_member_removed', (data) => {
+      const { sessionId, memberId } = data
+      socket.to(`group:${sessionId}`).emit('group_member_removed', {
+        sessionId,
+        memberId,
+      })
+    })
+
+    // Group typing indicator
+    socket.on('group_typing', (data) => {
+      const { sessionId } = data
+      socket.to(`group:${sessionId}`).emit('group_user_typing', {
+        sessionId,
+        userId,
+      })
+    })
+
+    socket.on('group_stop_typing', (data) => {
+      const { sessionId } = data
+      socket.to(`group:${sessionId}`).emit('group_user_stop_typing', {
+        sessionId,
+        userId,
+      })
     })
 
     socket.on('message_read', async (data) => {

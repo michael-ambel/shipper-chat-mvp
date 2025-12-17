@@ -23,24 +23,29 @@ model User {
   lastSeen  DateTime?
   createdAt DateTime @default(now())
 
-  sessionsAsUser1 ChatSession[]        @relation("User1Sessions")
-  sessionsAsUser2 ChatSession[]        @relation("User2Sessions")
-  messages        Message[]
-  participants    SessionParticipant[]
-  reactions       Reaction[]
+  sessionsAsUser1  ChatSession[]        @relation("User1Sessions")
+  sessionsAsUser2  ChatSession[]        @relation("User2Sessions")
+  createdGroups    ChatSession[]        @relation("GroupCreator")
+  messages         Message[]
+  participants     SessionParticipant[]
+  reactions        Reaction[]
 }
 
 model ChatSession {
-  id        String   @id @default(uuid()) @db.Uuid
-  user1Id   String?  @db.Uuid
-  user2Id   String?  @db.Uuid
-  isGroup   Boolean  @default(false)
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(uuid()) @db.Uuid
+  user1Id     String?  @db.Uuid
+  user2Id     String?  @db.Uuid
+  isGroup     Boolean  @default(false)
+  name        String?
+  avatar      String?
+  description String?
+  createdById String?  @db.Uuid
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   user1        User?                @relation("User1Sessions", fields: [user1Id], references: [id])
   user2        User?                @relation("User2Sessions", fields: [user2Id], references: [id])
+  createdBy    User?                @relation("GroupCreator", fields: [createdById], references: [id])
   messages     Message[]
   participants SessionParticipant[]
 
@@ -48,6 +53,7 @@ model ChatSession {
   @@index([user1Id])
   @@index([user2Id])
   @@index([isGroup])
+  @@index([createdById])
 }
 
 model Message {
@@ -106,6 +112,8 @@ model SessionParticipant {
   id        String   @id @default(uuid()) @db.Uuid
   sessionId String   @db.Uuid
   userId    String   @db.Uuid
+  role      String   @default("member")
+  isActive  Boolean  @default(true)
   joinedAt  DateTime @default(now())
   leftAt    DateTime?
 
@@ -115,4 +123,5 @@ model SessionParticipant {
   @@unique([sessionId, userId])
   @@index([sessionId])
   @@index([userId])
+  @@index([isActive])
 }
